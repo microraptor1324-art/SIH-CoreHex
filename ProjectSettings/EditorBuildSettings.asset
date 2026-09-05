@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/ARPhase10_FinalSimulationScene.unity
+    guid: a7b8c9d0e1f244f5ef9f05ac8b3467c3
+  - enabled: 0
+    path: Assets/Scenes/ARPhase1_TestScene.unity
+    guid: 63421f74a2e1ae74ba841c76e11234a5
+  - enabled: 0
+    path: Assets/Scenes/ARPhase9_InvestigationScene.unity
+    guid: f6a7b8c9d0e144f5ef9f05ac8b3467b2
+  - enabled: 0
+    path: Assets/Scenes/ARPhase8_ExtinguisherResponseScene.unity
+    guid: e58093b7c2f455a6fa0a16bd9c4578b1
+  - enabled: 0
+    path: Assets/Scenes/ARPhase7_EvacuationScene.unity
+    guid: d47f82a6b1e344f5ef9f05ac8b3467a0
+  - enabled: 0
+    path: Assets/Scenes/ARPhase6_DecisionStagesScene.unity
+    guid: c36e71f5a0d243f4de8e94fb7a2356f9
+  - enabled: 0
+    path: Assets/Scenes/ARPhase5_DetectionAndHealthScene.unity
+    guid: b25d60e4f9c142e3cf7d83ea6f1245e8
+  - enabled: 0
+    path: Assets/Scenes/ARPhase4_FireSystemScene.unity
+    guid: a14c59d3e8b041e2bf6c72d95e0134f7
+  - enabled: 0
+    path: Assets/Scenes/ARPhase3_MiningEnvironmentScene.unity
+    guid: 8c3f47b2a95e43d1a0bc5e8f49e021a3
+  - enabled: 0
+    path: Assets/Scenes/ARPhase2_RoomMeasurementScene.unity
+    guid: 9f18d03839ee69448bf2445acd4f11dc
+  - enabled: 0
+    path: Assets/Scenes/SampleScene.unity
+    guid: 99c9720ab356a0642a771bea13969a05
+  m_configObjects:
+    UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: 0f927b6590607104c85ea14fcdba9070, type: 2}
+    com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
+    com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 5a2ed9274ff194f4ea9c187c42d95f64, type: 2}
