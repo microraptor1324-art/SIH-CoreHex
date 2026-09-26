@@ -130,16 +130,18 @@ namespace ARMiningSimulator.AR
             return $"{distanceInMeters:F2} m";
         }
 
-        // Tiny visual-only offset to eliminate z-fighting with the floor mesh without appearing floating in air
-        private const float VisualLineFloorOffset = 0.003f;  // 3mm
-        private const float VisualLabelFloorOffset = 0.035f; // 3.5cm
+        // Visual floor offset layering:
+        // Real Floor (0.000m) -> Shaded Mesh (0.004m) -> Laser Lines (0.008m) -> Distance Badges (0.050m)
+        private const float VisualLineFloorOffset = 0.008f;  // 8mm above floor
+        private const float VisualLabelFloorOffset = 0.050f; // 5cm above floor
 
         /// <summary>
         /// Adds a permanent locked 3D measurement line between two points with a distance badge.
+        /// Accurately computes horizontal floor distance along the X-Z ground plane.
         /// </summary>
         public MeasurementSegment AddSegment(Vector3 from, Vector3 to)
         {
-            float dist = Vector3.Distance(from, to);
+            float dist = Vector2.Distance(new Vector2(from.x, from.z), new Vector2(to.x, to.z));
             GameObject lineObj = CreateLineGameObject($"Segment_{_segments.Count + 1}", from, to, _lockedLineColor);
             GameObject labelObj = CreateDistanceLabelGameObject($"Label_{_segments.Count + 1}", (from + to) * 0.5f, FormatDistance(dist));
 
@@ -161,7 +163,7 @@ namespace ARMiningSimulator.AR
             _previewLineRenderer.SetPosition(0, from + Vector3.up * VisualLineFloorOffset);
             _previewLineRenderer.SetPosition(1, to + Vector3.up * VisualLineFloorOffset);
 
-            _liveDistance = Vector3.Distance(from, to);
+            _liveDistance = Vector2.Distance(new Vector2(from.x, from.z), new Vector2(to.x, to.z));
 
             if (_previewLabelObj != null)
             {
@@ -189,7 +191,7 @@ namespace ARMiningSimulator.AR
         /// </summary>
         public void ConnectClosingSegment(Vector3 lastPoint, Vector3 firstPoint)
         {
-            float dist = Vector3.Distance(lastPoint, firstPoint);
+            float dist = Vector2.Distance(new Vector2(lastPoint.x, lastPoint.z), new Vector2(firstPoint.x, firstPoint.z));
             GameObject lineObj = CreateLineGameObject("ClosingSegment", lastPoint, firstPoint, _closingLineColor);
             GameObject labelObj = CreateDistanceLabelGameObject("ClosingLabel", (lastPoint + firstPoint) * 0.5f, FormatDistance(dist));
 
@@ -242,6 +244,30 @@ namespace ARMiningSimulator.AR
             }
 
             HidePreviewLine();
+        }
+
+        /// <summary>
+        /// Toggles the visibility of all measurement line GameObjects and distance labels.
+        /// Allows hiding survey lines when the underground mining environment is active.
+        /// </summary>
+        public void SetLinesVisible(bool visible)
+        {
+            foreach (var seg in _segments)
+            {
+                if (seg.LineObject != null) seg.LineObject.SetActive(visible);
+                if (seg.LabelObject != null) seg.LabelObject.SetActive(visible);
+            }
+
+            if (_closingSegment != null)
+            {
+                if (_closingSegment.LineObject != null) _closingSegment.LineObject.SetActive(visible);
+                if (_closingSegment.LabelObject != null) _closingSegment.LabelObject.SetActive(visible);
+            }
+
+            if (!visible)
+            {
+                HidePreviewLine();
+            }
         }
 
         private GameObject CreateLineGameObject(string name, Vector3 start, Vector3 end, Color color)

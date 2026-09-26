@@ -50,6 +50,23 @@ namespace ARMiningSimulator.Evacuation
             RebuildPath(startPos, exitPos, safeZonePos);
         }
 
+        public void ShowDirectPath(Vector3 startPos, Vector3 targetPos)
+        {
+            _lastExitPos = targetPos;
+            _lastSafeZonePos = targetPos;
+            _isVisible = true;
+
+            ClearChevrons();
+            CreateMaterial();
+
+            List<Vector3> waypoints = new List<Vector3>
+            {
+                new Vector3(startPos.x, 0.02f, startPos.z),
+                new Vector3(targetPos.x, 0.02f, targetPos.z)
+            };
+            BuildWaypoints(waypoints);
+        }
+
         public void UpdatePlayerPosition(Vector3 currentPos)
         {
             if (!_isVisible) return;
@@ -75,6 +92,11 @@ namespace ARMiningSimulator.Evacuation
                 new Vector3(safeZonePos.x, 0.02f, safeZonePos.z)
             };
 
+            BuildWaypoints(waypoints);
+        }
+
+        private void BuildWaypoints(List<Vector3> waypoints)
+        {
             for (int w = 0; w < waypoints.Count - 1; w++)
             {
                 Vector3 segStart = waypoints[w];

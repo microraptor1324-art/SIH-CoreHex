@@ -4,31 +4,22 @@ using ARMiningSimulator.Decisions;
 namespace ARMiningSimulator.UI
 {
     /// <summary>
-    /// Phase 6 Interactive Decision Test UI.
-    /// Presents Stage 1 (Alarm & Surface Notification) and Stage 2 (Ventilation Control).
+    /// Phase 6 Interactive Decision UI — Fortnite Quest & Battle Royale Style.
     /// Features:
-    /// - High contrast dark glassmorphism card styling.
-    /// - Response time bar with quick-thinking bonus indicator.
-    /// - Large touch-friendly option buttons (>= 50px).
-    /// - Educational feedback panel citing official MSHA/ISO mining safety standards.
-    /// - Total training score tracker.
+    /// - Slanted 3D header banner ("/// TACTICAL SURVIVAL DECISION ///").
+    /// - Chunky Fortnite buttons with rarity tiers (Legendary Gold, Epic Purple, Hazardous Red).
+    /// - Tactile 3D press-down interaction states.
+    /// - Thick segmented rapid-response timer meter with Gold bonus callout.
+    /// - High-energy Victory / Hazard feedback modal cards.
     /// </summary>
     public class DecisionUI : MonoBehaviour
     {
-        private Texture2D _whiteTexture;
         private GUIStyle _headerStyle;
         private GUIStyle _subHeaderStyle;
         private GUIStyle _questionStyle;
         private GUIStyle _optionBtnStyle;
         private GUIStyle _feedbackStyle;
         private GUIStyle _actionBtnStyle;
-
-        private void Awake()
-        {
-            _whiteTexture = new Texture2D(1, 1);
-            _whiteTexture.SetPixel(0, 0, Color.white);
-            _whiteTexture.Apply();
-        }
 
         private void OnGUI()
         {
@@ -52,22 +43,22 @@ namespace ARMiningSimulator.UI
             {
                 _headerStyle = new GUIStyle(GUI.skin.label)
                 {
-                    fontSize = 17,
+                    fontSize = 18,
                     fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter
+                    alignment = TextAnchor.MiddleCenter,
+                    normal = { textColor = TacticalUITheme.FortniteGold }
                 };
-                _headerStyle.normal.textColor = new Color(1.0f, 0.85f, 0.2f);
             }
 
             if (_subHeaderStyle == null)
             {
                 _subHeaderStyle = new GUIStyle(GUI.skin.label)
                 {
-                    fontSize = 13,
+                    fontSize = 12,
                     fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter
+                    alignment = TextAnchor.MiddleCenter,
+                    normal = { textColor = new Color(0.80f, 0.90f, 1.0f) }
                 };
-                _subHeaderStyle.normal.textColor = new Color(0.7f, 0.85f, 1.0f);
             }
 
             if (_questionStyle == null)
@@ -75,11 +66,11 @@ namespace ARMiningSimulator.UI
                 _questionStyle = new GUIStyle(GUI.skin.label)
                 {
                     fontSize = 15,
-                    fontStyle = FontStyle.Normal,
+                    fontStyle = FontStyle.Bold,
                     alignment = TextAnchor.MiddleCenter,
-                    wordWrap = true
+                    wordWrap = true,
+                    normal = { textColor = Color.white }
                 };
-                _questionStyle.normal.textColor = Color.white;
             }
 
             if (_optionBtnStyle == null)
@@ -89,21 +80,22 @@ namespace ARMiningSimulator.UI
                     fontSize = 14,
                     fontStyle = FontStyle.Bold,
                     alignment = TextAnchor.MiddleLeft,
-                    wordWrap = true
+                    wordWrap = true,
+                    normal = { textColor = Color.white },
+                    padding = new RectOffset(20, 20, 10, 10)
                 };
-                _optionBtnStyle.normal.textColor = Color.white;
             }
 
             if (_feedbackStyle == null)
             {
                 _feedbackStyle = new GUIStyle(GUI.skin.label)
                 {
-                    fontSize = 14,
+                    fontSize = 13,
                     fontStyle = FontStyle.Normal,
-                    alignment = TextAnchor.UpperLeft,
-                    wordWrap = true
+                    alignment = TextAnchor.MiddleLeft,
+                    wordWrap = true,
+                    normal = { textColor = new Color(0.92f, 0.95f, 0.98f) }
                 };
-                _feedbackStyle.normal.textColor = new Color(0.9f, 0.92f, 0.95f);
             }
 
             if (_actionBtnStyle == null)
@@ -112,9 +104,9 @@ namespace ARMiningSimulator.UI
                 {
                     fontSize = 16,
                     fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter
+                    alignment = TextAnchor.MiddleCenter,
+                    normal = { textColor = Color.white }
                 };
-                _actionBtnStyle.normal.textColor = Color.white;
             }
         }
 
@@ -123,51 +115,70 @@ namespace ARMiningSimulator.UI
             var q = DecisionManager.Instance.CurrentQuestion;
             if (q == null) return;
 
-            // Dim background overlay
-            DrawColorRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.08f, 0.75f));
+            // Fullscreen dark backdrop scrim
+            TacticalUITheme.DrawRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.09f, 0.90f));
 
-            float modalWidth = Mathf.Min(560f, Screen.width - 30f);
-            float optionCount = q.options.Count;
-            float modalHeight = 180f + optionCount * 60f;
+            float modalWidth = Mathf.Min(580f, Screen.width - 32f);
+            float modalHeight = 450f;
             float mx = (Screen.width - modalWidth) * 0.5f;
             float my = (Screen.height - modalHeight) * 0.5f;
+            Rect modalRect = new Rect(mx, my, modalWidth, modalHeight);
 
-            // Main Modal Card
-            DrawColorRect(new Rect(mx, my, modalWidth, modalHeight), new Color(0.10f, 0.12f, 0.16f, 0.95f));
+            // Fortnite Card with slanted ribbon
+            string bannerTag = !string.IsNullOrEmpty(q.title) ? q.title : "TACTICAL DECISION PROTOCOL";
+            TacticalUITheme.DrawFortniteCard(modalRect, TacticalUITheme.FortnitePurple, TacticalUITheme.FortniteNavyDark, $"/// {bannerTag} ///", TacticalUITheme.FortnitePurple);
 
-            // Stage Title
-            string stageTag = DecisionManager.Instance.CurrentStage == DecisionStage.Stage1_Alarm
-                ? "⚠️ DECISION STAGE 1 OF 2: IMMEDIATE ACTION"
-                : "⚠️ DECISION STAGE 2 OF 2: VENTILATION CONTROL";
-            GUI.Label(new Rect(mx, my + 15, modalWidth, 24), stageTag, _headerStyle);
+            // Title
+            GUI.Label(new Rect(mx + 20, my + 16, modalWidth - 40, 26), bannerTag, _headerStyle);
 
-            // Timer bar
+            // Threat / Escalation Warning line
+            float fireGrowthLimit = Fire.FireManager.Instance != null ? Fire.FireManager.Instance.FireGrowthTime : 60f;
+            float fireRem = Fire.FireManager.Instance != null ? Fire.FireManager.Instance.RemainingSmallTime : fireGrowthLimit;
+            bool isSmall = Fire.FireManager.Instance == null || Fire.FireManager.Instance.IsSmallPhase;
+            string statusStr = isSmall
+                ? $"⚡ FLASH ESCALATION RISK — {fireRem:F1}s BEFORE COMPARTMENT FLASHOVER ⚡"
+                : "🚨 CRITICAL INFERNO LEVEL — LIFE HAZARD RISK CRITICAL 🚨";
+            _subHeaderStyle.normal.textColor = isSmall ? TacticalUITheme.FortniteAmber : TacticalUITheme.FortniteRed;
+            GUI.Label(new Rect(mx + 20, my + 44, modalWidth - 40, 20), statusStr, _subHeaderStyle);
+
+            // Rapid response timer bar
             float elapsed = DecisionManager.Instance.StageTimer;
             float timeRatio = Mathf.Clamp01(elapsed / q.timeLimit);
-            Rect timerBar = new Rect(mx + 30, my + 44, modalWidth - 60, 6);
-            DrawColorRect(timerBar, new Color(0.2f, 0.22f, 0.28f));
-            Color timerColor = elapsed < 8f ? new Color(0.2f, 0.8f, 0.4f) : (elapsed < 14f ? new Color(0.9f, 0.7f, 0.1f) : new Color(0.9f, 0.2f, 0.2f));
-            DrawColorRect(new Rect(timerBar.x, timerBar.y, timerBar.width * (1f - timeRatio), 6), timerColor);
+            Rect timerBar = new Rect(mx + 30, my + 68, modalWidth - 60, 10);
+            Color barColor = elapsed <= 8f ? TacticalUITheme.FortniteGold : (elapsed <= 14f ? TacticalUITheme.FortniteAmber : TacticalUITheme.FortniteRed);
+            TacticalUITheme.DrawFortniteBar(timerBar, 1f - timeRatio, barColor, TacticalUITheme.CardSlotBg, 10);
 
-            // Question Text
-            GUI.Label(new Rect(mx + 25, my + 60, modalWidth - 50, 50), q.questionText, _questionStyle);
+            // Question prompt box
+            Rect questionBox = new Rect(mx + 25, my + 86, modalWidth - 50, 60);
+            TacticalUITheme.DrawFortniteCard(questionBox, TacticalUITheme.BorderSubtle, TacticalUITheme.CardSlotBg);
+            GUI.Label(new Rect(questionBox.x + 12, questionBox.y + 8, questionBox.width - 24, questionBox.height - 16), q.questionText, _questionStyle);
 
-            // Options List
-            float optY = my + 120f;
+            // 3 Chunky 3D Action Choice Buttons (Uniform Color - NO HINTS)
+            float optY = my + 158f;
+            float optH = 60f;
+            float optGap = 12f;
+
             for (int i = 0; i < q.options.Count; i++)
             {
                 var opt = q.options[i];
-                Rect btnRect = new Rect(mx + 25, optY, modalWidth - 50, 52);
+                Rect optRect = new Rect(mx + 25, optY + i * (optH + optGap), modalWidth - 50, optH);
 
-                GUI.backgroundColor = new Color(0.18f, 0.22f, 0.30f);
-                if (GUI.Button(btnRect, $"  {opt.text}", _optionBtnStyle))
+                string badge = $"[{i + 1}] ";
+                string labelText = $"{badge}{opt.text.ToUpper()}";
+
+                Color optAccent = TacticalUITheme.FortniteBlue;
+                string neutralTag = $"[OPTION {i + 1}]";
+
+                if (TacticalUITheme.DrawFortniteButton(optRect, labelText, optAccent, _optionBtnStyle, neutralTag))
                 {
                     DecisionManager.Instance.SubmitDecision(i);
                 }
-                GUI.backgroundColor = Color.white;
-
-                optY += 60f;
             }
+
+            // Quick bonus hint at bottom
+            string bonusHint = elapsed <= 8.0f ? "⚡ RAPID-RESPONSE BONUS ACTIVE (+25 BONUS PTS)" : "STANDARD RESPONSE PROTOCOL";
+            var hintStyle = new GUIStyle(_subHeaderStyle) { normal = { textColor = elapsed <= 8.0f ? TacticalUITheme.FortniteGold : new Color(0.6f, 0.7f, 0.8f) } };
+            GUI.Label(new Rect(mx + 20, my + modalHeight - 26, modalWidth - 40, 20), bonusHint, hintStyle);
         }
 
         private void DrawFeedbackModal()
@@ -175,54 +186,54 @@ namespace ARMiningSimulator.UI
             var opt = DecisionManager.Instance.LastSelectedOption;
             if (opt == null) return;
 
-            DrawColorRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.08f, 0.80f));
+            // Fullscreen dark tactical scrim
+            TacticalUITheme.DrawRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.09f, 0.90f));
 
-            float modalWidth = Mathf.Min(560f, Screen.width - 30f);
+            float modalWidth = Mathf.Min(580f, Screen.width - 32f);
             float modalHeight = 360f;
             float mx = (Screen.width - modalWidth) * 0.5f;
             float my = (Screen.height - modalHeight) * 0.5f;
+            Rect modalRect = new Rect(mx, my, modalWidth, modalHeight);
 
-            DrawColorRect(new Rect(mx, my, modalWidth, modalHeight), new Color(0.10f, 0.12f, 0.16f, 0.96f));
+            Color outcomeColor = opt.isCorrect ? TacticalUITheme.FortniteGreen : (opt.scoreModifier > 0 ? TacticalUITheme.FortniteAmber : TacticalUITheme.FortniteRed);
+            string ribbonTag = opt.isCorrect ? "/// OBJECTIVE VERIFIED ///" : "/// SAFETY VIOLATION ///";
 
-            // Result Banner
-            string bannerText = opt.isCorrect ? "✅ CORRECT SAFETY PROTOCOL" : "❌ SAFETY PROTOCOL BREACH";
-            Color bannerColor = opt.isCorrect ? new Color(0.15f, 0.85f, 0.45f) : new Color(0.95f, 0.25f, 0.25f);
+            TacticalUITheme.DrawFortniteCard(modalRect, outcomeColor, TacticalUITheme.FortniteNavyDark, ribbonTag, outcomeColor);
 
-            GUI.color = bannerColor;
-            var resultStyle = new GUIStyle(_headerStyle) { fontSize = 20, alignment = TextAnchor.MiddleCenter };
-            GUI.Label(new Rect(mx, my + 20, modalWidth, 30), bannerText, resultStyle);
-            GUI.color = Color.white;
+            // Title
+            string resultTitle = opt.isCorrect ? "🏆 CORRECT SURVIVAL ACTION!" : (opt.scoreModifier > 0 ? "⚠️ SUB-OPTIMAL PROCEDURE" : "🚨 HAZARDOUS VIOLATION LOGGED");
+            var resStyle = new GUIStyle(_headerStyle) { normal = { textColor = outcomeColor }, fontSize = 20 };
+            GUI.Label(new Rect(mx + 20, my + 18, modalWidth - 40, 28), resultTitle, resStyle);
 
             // Score Modifier Badge
             string scoreSign = opt.scoreModifier >= 0 ? $"+{opt.scoreModifier}" : $"{opt.scoreModifier}";
-            GUI.Label(new Rect(mx, my + 52, modalWidth, 22), $"Score Impact: {scoreSign} PTS (Total Score: {DecisionManager.Instance.TotalScore})", _subHeaderStyle);
+            int totalScore = DecisionManager.Instance.TotalScore;
+            GUI.Label(new Rect(mx + 20, my + 48, modalWidth - 40, 20), $"SCORE IMPACT: {scoreSign} PTS  |  TOTAL SCORE: {totalScore} PTS", _subHeaderStyle);
 
-            // Explanation Box
-            Rect expBoxRect = new Rect(mx + 25, my + 85, modalWidth - 50, 180);
-            DrawColorRect(expBoxRect, new Color(0.06f, 0.08f, 0.11f, 0.85f));
+            // Explanation box
+            Rect expBox = new Rect(mx + 25, my + 76, modalWidth - 50, 160);
+            TacticalUITheme.DrawFortniteCard(expBox, TacticalUITheme.BorderSubtle, TacticalUITheme.CardSlotBg);
+            GUI.Label(new Rect(expBox.x + 14, expBox.y + 12, expBox.width - 28, expBox.height - 24), opt.explanation, _feedbackStyle);
 
-            GUI.Label(new Rect(expBoxRect.x + 15, expBoxRect.y + 12, expBoxRect.width - 30, 24), "📋 Standard Mining Protocol (MSHA / ISO):", _subHeaderStyle);
-            GUI.Label(new Rect(expBoxRect.x + 15, expBoxRect.y + 40, expBoxRect.width - 30, 130), opt.explanation, _feedbackStyle);
+            // Proceed Action Button
+            bool isFinal = DecisionManager.Instance.CurrentStage == DecisionStage.Stage2_Ventilation;
+            string nextBtnText;
+            if (opt.isCorrect)
+            {
+                nextBtnText = isFinal
+                    ? "PROCEED TO REFUGE EVACUATION ➔"
+                    : "PROCEED TO VENTILATION CONTROL ➔";
+            }
+            else
+            {
+                nextBtnText = "🔄 RE-EVALUATE: SELECT CORRECT SAFETY ACTION ➔";
+            }
 
-            // Continue Button
-            string nextBtnText = DecisionManager.Instance.CurrentStage == DecisionStage.Stage1_Alarm
-                ? "PROCEED TO STAGE 2: VENTILATION ➔"
-                : "PROCEED TO EVACUATION ➔";
-
-            GUI.backgroundColor = new Color(0.2f, 0.7f, 0.35f);
-            if (GUI.Button(new Rect(mx + 35, my + 285, modalWidth - 70, 52), nextBtnText, _actionBtnStyle))
+            Rect nextBtnRect = new Rect(mx + 30, my + 265, modalWidth - 60, 60);
+            if (TacticalUITheme.DrawFortniteButton(nextBtnRect, nextBtnText, outcomeColor, _actionBtnStyle, opt.isCorrect ? "[CONTINUE]" : "[RETRY]"))
             {
                 DecisionManager.Instance.ProceedAfterFeedback();
             }
-            GUI.backgroundColor = Color.white;
-        }
-
-        private void DrawColorRect(Rect rect, Color color)
-        {
-            Color old = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(rect, _whiteTexture);
-            GUI.color = old;
         }
     }
 }

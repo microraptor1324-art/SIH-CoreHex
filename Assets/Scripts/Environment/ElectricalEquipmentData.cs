@@ -10,7 +10,11 @@ namespace ARMiningSimulator.Environment
         CableBox,
         Transformer,
         ElectricalMotor,
-        Switchboard
+        Switchboard,
+        CableReel,
+        PortableElectricDrill,
+        BatteryChargingStation,
+        VentilationFan
     }
 
     /// <summary>

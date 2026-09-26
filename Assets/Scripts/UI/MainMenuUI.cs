@@ -137,7 +137,7 @@ namespace ARMiningSimulator.UI
         {
             InitStyles();
 
-            DrawTopBarButton();
+            // Scenarios button removed per user request
 
             if (_isOpen)
             {

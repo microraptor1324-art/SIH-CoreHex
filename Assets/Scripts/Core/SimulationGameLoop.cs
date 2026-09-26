@@ -79,11 +79,47 @@ namespace ARMiningSimulator.Core
             InvestigationAndScoreUI.OnNextLevelRequested -= HandleNextLevelRequested;
         }
 
-        private void SetStage(SimulationStage newStage)
+        public void SetStage(SimulationStage newStage)
         {
             _currentStage = newStage;
             Debug.Log($"[SimulationGameLoop] 🏁 Stage Transition -> {_currentStage}");
             OnSimulationStageChanged?.Invoke(_currentStage);
+        }
+
+        /// <summary>
+        /// Starts the full end-to-end fire safety training drill:
+        /// Ensures equipment is deployed, starts scenario fire on a random machine/tool,
+        /// resets reaction stopwatch and HUD visibility, and transitions the loop to FireIgnited.
+        /// </summary>
+        public void StartTrainingDrill()
+        {
+            Debug.Log("[SimulationGameLoop] 🚨 START TRAINING DRILL INVOKED!");
+
+            // Ensure equipment is deployed if generator is still waiting on delay
+            var gen = FindFirstObjectByType<MiningEnvironmentGenerator>();
+            if (gen != null && !gen.IsEquipmentSpawned && gen.IsEnvironmentReady)
+            {
+                gen.DeployEquipmentNow();
+            }
+
+            var fireManager = FireManager.Instance ?? FindFirstObjectByType<FireManager>();
+            if (fireManager != null)
+            {
+                fireManager.StartScenarioFires();
+            }
+
+            if (TraineeDetection.Instance != null)
+            {
+                TraineeDetection.Instance.StartStopwatch();
+            }
+
+            var hud = FindFirstObjectByType<TraineeStatusHUD>();
+            if (hud != null)
+            {
+                hud.ResetFireVisibility();
+            }
+
+            SetStage(SimulationStage.FireIgnited);
         }
 
         private void HandleEnvironmentGenerated()

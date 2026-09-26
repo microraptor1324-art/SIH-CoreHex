@@ -10,7 +10,9 @@ namespace ARMiningSimulator.Investigation
         ConveyorBearingFrictionDustIgnition = 1,
         HydraulicHoseRuptureHotSurface = 2,
         TransformerOilSurgeFlashover = 3,
-        VentilationFanMotorSeizure = 4
+        VentilationFanMotorSeizure = 4,
+        BatteryThermalRunawayOvercharge = 5,
+        MotorWindingOverloadFailure = 6
     }
 
     [System.Serializable]
@@ -24,6 +26,17 @@ namespace ARMiningSimulator.Investigation
     }
 
     [System.Serializable]
+    public class CandidateMachineData
+    {
+        public string displayName;
+        public GameObject targetGameObject;
+        public bool isOrigin;
+        public string inspectionClueText;
+        public string thermalTelemetryText;
+        public bool hasBeenInspected;
+    }
+
+    [System.Serializable]
     public class IncidentReport
     {
         public string equipmentName;
@@ -31,6 +44,8 @@ namespace ARMiningSimulator.Investigation
         public string thermalReading;
         public RootCauseType actualCause;
         public List<RootCauseOption> options = new List<RootCauseOption>();
+        public List<CandidateMachineData> candidateMachines = new List<CandidateMachineData>();
+        public CandidateMachineData selectedMachine;
     }
 
     public enum TraineeGrade
@@ -61,6 +76,9 @@ namespace ARMiningSimulator.Investigation
 
         public int suppressionBonus;
         public bool wasSuppressed;
+
+        public int machineOriginScore;
+        public string identifiedMachineName;
 
         public int investigationScore;
         public bool investigationCorrect;

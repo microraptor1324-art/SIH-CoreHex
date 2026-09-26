@@ -53,41 +53,41 @@ namespace ARMiningSimulator.Fire
                     return new FireSeverityConfig
                     {
                         severity = FireSeverity.Small,
-                        damageRate = 3f,
-                        damageRadius = 1.8f,
+                        damageRate = 2.0f,
+                        damageRadius = 1.2f,
                         isExtinguishable = true,
-                        particleScale = 0.45f,
-                        fireEmissionRate = 20f,
-                        smokeEmissionRate = 12f,
-                        lightIntensity = 2.0f,
-                        lightRange = 3.0f
+                        particleScale = 0.32f,
+                        fireEmissionRate = 12f,
+                        smokeEmissionRate = 5f,
+                        lightIntensity = 1.3f,
+                        lightRange = 1.8f
                     };
                 case FireSeverity.Medium:
                     return new FireSeverityConfig
                     {
                         severity = FireSeverity.Medium,
                         damageRate = 8f,
-                        damageRadius = 2.8f,
+                        damageRadius = 2.5f,
                         isExtinguishable = true,
-                        particleScale = 0.85f,
+                        particleScale = 0.90f,
                         fireEmissionRate = 45f,
-                        smokeEmissionRate = 35f,
+                        smokeEmissionRate = 30f,
                         lightIntensity = 3.5f,
-                        lightRange = 5.0f
+                        lightRange = 4.8f
                     };
                 case FireSeverity.Large:
                 default:
                     return new FireSeverityConfig
                     {
                         severity = FireSeverity.Large,
-                        damageRate = 18f,
-                        damageRadius = 4.0f,
+                        damageRate = 22f,
+                        damageRadius = 4.5f,
                         isExtinguishable = false, // Rule: Large fire should NOT be fought
-                        particleScale = 1.4f,
-                        fireEmissionRate = 85f,
-                        smokeEmissionRate = 75f,
-                        lightIntensity = 5.5f,
-                        lightRange = 8.0f
+                        particleScale = 2.6f,
+                        fireEmissionRate = 130f,
+                        smokeEmissionRate = 110f,
+                        lightIntensity = 8.0f,
+                        lightRange = 11.0f
                     };
             }
         }

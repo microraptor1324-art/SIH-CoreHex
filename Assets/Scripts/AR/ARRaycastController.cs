@@ -16,11 +16,11 @@ namespace ARMiningSimulator.AR
     }
 
     /// <summary>
-    /// Professional AR Raycasting & Stabilization Controller.
-    /// Strictly prioritizes horizontal upward-facing floor planes.
-    /// Rejects walls, ceilings, vertical surfaces, and arbitrary feature points for measurement.
-    /// Features multi-sample rolling-average stabilization ("HOLD STEADY..." vs "READY")
-    /// and a continuous 3D world-space reticle showing real-time environmental targeting.
+    /// Professional AR Raycasting & Floor Stabilization Controller.
+    /// Strictly detects and tracks the true physical floor using lowest-cluster multi-plane heuristics,
+    /// semantic floor classification, and unified coplanar projection.
+    /// Features critically-damped visual reticle smoothing (glides without jitter or lag)
+    /// and continuous analytical projection extending seamlessly to room corners and far range (30m+).
     /// </summary>
     public class ARRaycastController : MonoBehaviour
     {
@@ -30,10 +30,9 @@ namespace ARMiningSimulator.AR
         [SerializeField] private AROcclusionManager _occlusionManager;
         [SerializeField] private Camera _arCamera;
 
-        [Header("Stabilization Settings")]
-        [SerializeField] private int _sampleCapacity = 10;
-        [SerializeField] private float _stabilityTolerance = 0.035f; // 3.5 cm max deviation to be "READY"
-        [SerializeField] private float _resetDriftThreshold = 0.35f; // 35 cm sudden motion clears buffer
+        [Header("Stabilization & Smoothing")]
+        [SerializeField] private float _reticleLerpSpeed = 24.0f; // Smooth glide factor
+        [SerializeField] private float _teleportThreshold = 0.45f; // Fast camera whip snap threshold
 
         [Header("Colors")]
         [SerializeField] private Color _readyColor = new Color(0.15f, 0.95f, 0.45f, 0.95f);    // Bright Green
@@ -42,7 +41,6 @@ namespace ARMiningSimulator.AR
         [SerializeField] private Color _trackingColor = new Color(1.0f, 0.55f, 0.1f, 0.85f);  // Orange
 
         // State & Buffers
-        private readonly Queue<Vector3> _sampleBuffer = new Queue<Vector3>();
         private static readonly List<ARRaycastHit> s_RaycastHits = new List<ARRaycastHit>();
 
         private Vector3 _stabilizedPosition = Vector3.zero;
@@ -51,26 +49,34 @@ namespace ARMiningSimulator.AR
         private bool _isPointStable = false;
         private DetectedSurfaceType _currentSurface = DetectedSurfaceType.None;
         private ARPlane _currentHitPlane = null;
-        private TrackableId _preferredFloorPlaneId = TrackableId.invalidId;
         private float _distanceFromCamera = 0f;
 
         // Floor Elevation Calibration & Authoritative Locking System
         private bool _hasCalibratedFloor = false;
         private float _calibratedFloorY = 0f;
         private ARPlane _calibratedFloorPlane = null;
+        private Vector3 _currentFloorNormal = Vector3.up;
+        private Vector3 _currentFloorPlanePos = Vector3.zero;
         private Vector3 _currentRawHitPos = Vector3.zero;
+        private Vector3 _lastFrameRawHitPos = Vector3.zero;
 
         private bool _isFloorLocked = false;
         private ARPlane _lockedFloorPlane = null;
         private float _lockedFloorY = 0f;
+        private Vector3 _lockedFloorNormal = Vector3.up;
+        private Vector3 _lockedFloorPos = Vector3.zero;
 
-        // 3D Reticle in World Space
+        // 3D Reticle in World Space & Smoothing
         private GameObject _reticleRoot;
         private Renderer _outerRingRenderer;
         private Renderer _centerDotRenderer;
         private Material _reticleMaterial;
         private TextMesh _reticleTextMesh;
         private GameObject _reticleTextObj;
+
+        private Vector3 _smoothedReticlePos = Vector3.zero;
+        private Quaternion _smoothedReticleRot = Quaternion.identity;
+        private bool _hasInitializedReticle = false;
 
         // Public Properties
         public bool HasValidFloorHit => _hasValidFloorHit;
@@ -85,18 +91,26 @@ namespace ARMiningSimulator.AR
         public bool HasCalibratedFloor => _hasCalibratedFloor;
         public float CalibratedFloorY => _calibratedFloorY;
         public ARPlane CalibratedFloorPlane => _calibratedFloorPlane;
+        public Vector3 CurrentFloorNormal => _currentFloorNormal;
         public bool IsFloorLocked => _isFloorLocked;
         public ARPlane LockedFloorPlane => _lockedFloorPlane;
         public float LockedFloorY => _lockedFloorY;
+        public Vector3 LockedFloorNormal => _lockedFloorNormal;
 
-        public void LockFloorPlane(ARPlane plane, float floorY)
+        /// <summary>
+        /// Permanently locks the authoritative floor reference plane once Corner 1 is placed.
+        /// Ensures all 4 corners and the room polygon are mathematically coplanar.
+        /// </summary>
+        public void LockFloorPlane(ARPlane plane, float floorY, Vector3? normal = null, Vector3? planePos = null)
         {
             _isFloorLocked = true;
-            _lockedFloorPlane = plane ?? _calibratedFloorPlane;
+            _lockedFloorPlane = ResolveActivePlane(plane ?? _calibratedFloorPlane);
             _lockedFloorY = floorY;
+            _lockedFloorNormal = normal ?? (_currentFloorNormal.sqrMagnitude > 0.5f ? _currentFloorNormal : Vector3.up);
+            _lockedFloorPos = planePos ?? (plane != null ? plane.transform.position : _currentFloorPlanePos);
             _calibratedFloorY = floorY;
             _hasCalibratedFloor = true;
-            Debug.Log($"[ARRaycastController] Authoritative Floor Plane LOCKED at Y={floorY:F4} (Plane: {(_lockedFloorPlane != null ? _lockedFloorPlane.trackableId.ToString() : "Calibrated")})");
+            Debug.Log($"[ARRaycastController] Authoritative Floor Plane LOCKED at Y={floorY:F4}, Normal={_lockedFloorNormal}");
         }
 
         public void UnlockFloorPlane()
@@ -106,8 +120,12 @@ namespace ARMiningSimulator.AR
             _hasCalibratedFloor = false;
             _calibratedFloorY = 0f;
             _calibratedFloorPlane = null;
+            _currentFloorNormal = Vector3.up;
+            _currentFloorPlanePos = Vector3.zero;
+            _lockedFloorNormal = Vector3.up;
+            _lockedFloorPos = Vector3.zero;
             _currentRawHitPos = Vector3.zero;
-            _sampleBuffer.Clear();
+            _hasInitializedReticle = false;
             Debug.Log("[ARRaycastController] Authoritative Floor Plane UNLOCKED.");
         }
 
@@ -191,8 +209,29 @@ namespace ARMiningSimulator.AR
             _reticleTextMesh.text = "POINT AT FLOOR";
         }
 
+        // Reticle Active & Throttle State
+        private bool _isReticleActive = true;
+        private readonly List<ARPlane> _candidatePlanes = new List<ARPlane>(16);
+
+        public bool IsReticleActive => _isReticleActive;
+
+        /// <summary>
+        /// Controls whether reticle calculations and 3D rendering are active.
+        /// When inactive (e.g. during simulation), raycasting and elevation queries are suspended.
+        /// </summary>
+        public void SetReticleActive(bool active)
+        {
+            _isReticleActive = active;
+            if (_reticleRoot != null)
+            {
+                _reticleRoot.SetActive(active);
+            }
+        }
+
         private void Update()
         {
+            if (!_isReticleActive || !enabled) return;
+
             if (_arCamera == null)
             {
                 _arCamera = Camera.main;
@@ -210,53 +249,100 @@ namespace ARMiningSimulator.AR
         }
 
         /// <summary>
-        /// Continuously scans all detected AR planes to identify and calibrate the true physical floor elevation.
-        /// The physical floor in any room is the lowest horizontal surface below the camera.
-        /// Surfaces higher than the floor (tables, desks, beds, chairs) are identified as elevated surfaces.
+        /// Recursively resolves an ARPlane up its subsumption chain to the active merged plane.
+        /// Prevents referencing frozen/dead tracking data when ARCore merges planes.
         /// </summary>
+        private ARPlane ResolveActivePlane(ARPlane plane)
+        {
+            if (plane == null) return null;
+            ARPlane current = plane;
+            int guard = 0;
+            while (current.subsumedBy != null && guard++ < 10)
+            {
+                current = current.subsumedBy;
+            }
+            return current;
+        }
+
         /// <summary>
-        /// Continuously scans all detected AR planes to identify and calibrate the true physical floor elevation.
-        /// The physical floor in any room is the lowest horizontal surface below the camera.
-        /// Surfaces higher than the floor (tables, desks, beds, chairs) are identified as elevated surfaces.
+        /// Continuously scans detected AR planes to identify the true physical floor using lowest-cluster heuristics.
+        /// Rejects elevated horizontal surfaces (tables, desks, beds) and rewards semantic floor classifications.
         /// </summary>
         private void CalibrateFloorElevation()
         {
-            // Once the floor plane is authoritatively locked, retain it as the ground truth
-            if (_isFloorLocked) return;
+            if (_isFloorLocked || !_isReticleActive) return;
             if (_planeManager == null || _arCamera == null) return;
 
             float cameraY = _arCamera.transform.position.y;
-            float lowestY = float.MaxValue;
-            ARPlane lowestPlane = null;
+            _candidatePlanes.Clear();
 
-            foreach (var plane in _planeManager.trackables)
+            foreach (var p in _planeManager.trackables)
             {
-                if (plane == null) continue;
-                if (plane.alignment != PlaneAlignment.HorizontalUp) continue;
-                if (plane.trackingState == TrackingState.None) continue;
+                if (p == null) continue;
+                ARPlane active = ResolveActivePlane(p);
+                if (active == null) continue;
+                if (active.alignment != PlaneAlignment.HorizontalUp) continue;
+                if (active.trackingState == TrackingState.None) continue;
 
-                float planeY = plane.transform.position.y;
-                // Floor must be below camera eye level by at least 0.30m (user holds phone 1.1m - 1.6m above floor)
-                if (planeY < cameraY - 0.30f && planeY < lowestY)
+                float planeY = active.transform.position.y;
+                // Floor must be physically below the camera (at least 0.20m below, down to 3.0m)
+                if (planeY < cameraY - 0.20f && planeY > cameraY - 3.0f)
                 {
-                    lowestY = planeY;
-                    lowestPlane = plane;
+                    if (!_candidatePlanes.Contains(active))
+                        _candidatePlanes.Add(active);
                 }
             }
 
-            if (lowestPlane != null)
+            if (_candidatePlanes.Count == 0) return;
+
+            // Sort ascending by height (lowest first)
+            _candidatePlanes.Sort((a, b) => a.transform.position.y.CompareTo(b.transform.position.y));
+
+            // Cluster planes near the lowest detected elevation (within 25cm of lowest)
+            float lowestY = _candidatePlanes[0].transform.position.y;
+            ARPlane bestPlane = _candidatePlanes[0];
+            float bestScore = -1f;
+
+            foreach (var plane in _candidatePlanes)
             {
-                _calibratedFloorY = lowestY;
-                _calibratedFloorPlane = lowestPlane;
+                float elevationDiff = plane.transform.position.y - lowestY;
+                // Exclude elevated surfaces (tables/desks) that are well above the lowest cluster
+                if (elevationDiff > 0.25f) continue;
+
+                float area = Mathf.Max(0.01f, plane.size.x * plane.size.y);
+                float score = area;
+
+                // Strong bonus for semantic Floor classification if provided by ARCore
+                if (plane.classifications.HasFlag(PlaneClassifications.Floor))
+                {
+                    score += 15.0f;
+                }
+
+                // Preference for planes closest to the lowest detected plane
+                score += (0.25f - elevationDiff) * 2.0f;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestPlane = plane;
+                }
+            }
+
+            if (bestPlane != null)
+            {
+                _calibratedFloorPlane = bestPlane;
+                _calibratedFloorY = bestPlane.transform.position.y;
+                _currentFloorPlanePos = bestPlane.transform.position;
+                Vector3 n = bestPlane.normal;
+                _currentFloorNormal = (n.sqrMagnitude > 0.5f && n.y > 0.6f) ? n.normalized : Vector3.up;
                 _hasCalibratedFloor = true;
             }
         }
 
         /// <summary>
-        /// Continuously casts a ray from the exact screen center (0.5, 0.5).
-        /// Strictly filters for the calibrated physical floor plane below the camera.
-        /// Rejects elevated tables, desks, beds, walls, vertical planes, ceilings, and feature points.
-        /// In room corners where plane polygons have boundary gaps, seamlessly projects onto the calibrated floor plane.
+        /// Multi-tier AR raycasting with unified coplanar floor projection.
+        /// Eliminates edge-glitch jumps when crossing plane boundaries,
+        /// rejects tables/walls, and maintains seamless floor tracking out to far room corners.
         /// </summary>
         private void PerformFloorRaycast()
         {
@@ -267,172 +353,186 @@ namespace ARMiningSimulator.AR
 
             if (_arCamera == null) return;
 
-            // Optical center of camera viewport
-            float w = (_arCamera != null && _arCamera.pixelWidth > 0) ? _arCamera.pixelWidth : Screen.width;
-            float h = (_arCamera != null && _arCamera.pixelHeight > 0) ? _arCamera.pixelHeight : Screen.height;
-            Vector2 screenCenter = new Vector2(w * 0.5f, h * 0.5f);
-            s_RaycastHits.Clear();
-
-            // Prioritize PlaneWithinPolygon (exact boundary)
-            bool raycastSuccess = _raycastManager != null && _raycastManager.Raycast(screenCenter, s_RaycastHits, TrackableType.PlaneWithinPolygon);
-            if (!raycastSuccess || s_RaycastHits.Count == 0)
-            {
-                // Fallback to PlaneWithinBounds if within polygon's convex bounding box
-                raycastSuccess = _raycastManager != null && _raycastManager.Raycast(screenCenter, s_RaycastHits, TrackableType.PlaneWithinBounds);
-            }
-
-            ARRaycastHit bestHit = default;
-            ARPlane bestPlane = null;
-            bool foundFloor = false;
-            Vector3 rawHitPos = Vector3.zero;
-
             float cameraY = _arCamera.transform.position.y;
-            float targetFloorY = _isFloorLocked ? _lockedFloorY : (_hasCalibratedFloor ? _calibratedFloorY : 0f);
+            Vector3 camPos = _arCamera.transform.position;
+            Vector3 camFwd = _arCamera.transform.forward;
 
-            if (raycastSuccess && s_RaycastHits.Count > 0)
-            {
-                // Iterate through hits (closest first)
-                foreach (var hit in s_RaycastHits)
-                {
-                    ARPlane plane = hit.trackable as ARPlane ?? (_planeManager != null ? _planeManager.GetPlane(hit.trackableId) : null);
-                    if (plane != null)
-                    {
-                        if (plane.alignment == PlaneAlignment.Vertical)
-                        {
-                            _currentSurface = DetectedSurfaceType.Wall;
-                            continue;
-                        }
-
-                        if (IsValidFloorPlane(plane, hit.pose.position, cameraY))
-                        {
-                            // If floor is locked or calibrated, strictly reject elevated surfaces (tables, desks, beds)
-                            if ((_isFloorLocked || _hasCalibratedFloor) && hit.pose.position.y > targetFloorY + 0.18f)
-                            {
-                                _currentSurface = DetectedSurfaceType.HorizontalPlane; // Table, desk, or countertop
-                                continue;
-                            }
-
-                            // If floor is locked, prioritize matching the locked plane or one at the same elevation
-                            if (_isFloorLocked && _lockedFloorPlane != null)
-                            {
-                                if (plane.trackableId != _lockedFloorPlane.trackableId && Mathf.Abs(hit.pose.position.y - _lockedFloorY) > 0.12f)
-                                {
-                                    continue;
-                                }
-                            }
-
-                            bestHit = hit;
-                            bestPlane = plane;
-                            rawHitPos = hit.pose.position;
-                            foundFloor = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Fallback Corner Projection: If raycast didn't hit a detected plane polygon (e.g. corner of room, wall base),
-            // but we have a calibrated/locked floor elevation, project the center ray directly onto the authoritative floor plane!
-            if (!foundFloor && (_isFloorLocked || _hasCalibratedFloor))
-            {
-                Vector3 camPos = _arCamera.transform.position;
-                Vector3 camFwd = _arCamera.transform.forward;
-                float refY = _isFloorLocked ? _lockedFloorY : _calibratedFloorY;
-
-                if (camFwd.y < -0.05f)
-                {
-                    float t = (refY - camPos.y) / camFwd.y;
-                    if (t > 0.2f && t < 25.0f)
-                    {
-                        rawHitPos = new Vector3(camPos.x + camFwd.x * t, refY, camPos.z + camFwd.z * t);
-                        bestPlane = _isFloorLocked ? (_lockedFloorPlane ?? _calibratedFloorPlane) : _calibratedFloorPlane;
-                        foundFloor = true;
-                    }
-                }
-            }
-
-            if (!foundFloor)
+            // Pitch check: require camera to look downward (even slightly: camFwd.y < -0.002)
+            if (camFwd.y >= -0.002f)
             {
                 _currentRawHitPos = Vector3.zero;
-                _sampleBuffer.Clear();
                 _distanceFromCamera = 0f;
                 return;
             }
 
-            // Calibrate floor height if this is our first valid floor plane hit and not locked
-            if (!_isFloorLocked && !_hasCalibratedFloor)
+            // Reference authoritative floor data
+            float refFloorY = _isFloorLocked ? _lockedFloorY : (_hasCalibratedFloor ? _calibratedFloorY : (cameraY - 1.35f));
+            Vector3 refFloorNormal = _isFloorLocked ? _lockedFloorNormal : (_hasCalibratedFloor ? _currentFloorNormal : Vector3.up);
+            Vector3 refFloorPos = _isFloorLocked ? _lockedFloorPos : (_hasCalibratedFloor ? _currentFloorPlanePos : new Vector3(camPos.x, refFloorY, camPos.z));
+            if (refFloorPos == Vector3.zero) refFloorPos = new Vector3(camPos.x, refFloorY, camPos.z);
+
+            float w = (_arCamera != null && _arCamera.pixelWidth > 0) ? _arCamera.pixelWidth : Screen.width;
+            float h = (_arCamera != null && _arCamera.pixelHeight > 0) ? _arCamera.pixelHeight : Screen.height;
+            Vector2 screenCenter = new Vector2(w * 0.5f, h * 0.5f);
+
+            bool hitWall = false;
+            bool hitObstacle = false;
+            bool hitFloorPlane = false;
+            Vector3 rawHitSpot = Vector3.zero;
+            float rawHitDist = 0f;
+            ARPlane hitFloorPlaneObj = null;
+
+            if (_raycastManager != null)
             {
-                _hasCalibratedFloor = true;
-                _calibratedFloorY = rawHitPos.y;
-                _calibratedFloorPlane = bestPlane;
+                TrackableType[] raycastTiers = new TrackableType[]
+                {
+                    TrackableType.PlaneWithinPolygon,
+                    TrackableType.PlaneWithinBounds,
+                    TrackableType.PlaneEstimated
+                };
+
+                foreach (var tier in raycastTiers)
+                {
+                    s_RaycastHits.Clear();
+                    if (_raycastManager.Raycast(screenCenter, s_RaycastHits, tier) && s_RaycastHits.Count > 0)
+                    {
+                        foreach (var hit in s_RaycastHits)
+                        {
+                            ARPlane rawPlane = hit.trackable as ARPlane ?? (_planeManager != null ? _planeManager.GetPlane(hit.trackableId) : null);
+                            ARPlane plane = ResolveActivePlane(rawPlane);
+
+                            if (plane != null)
+                            {
+                                // Check for wall
+                                if (plane.alignment == PlaneAlignment.Vertical || (plane.normal.sqrMagnitude > 0.5f && plane.normal.y < 0.35f))
+                                {
+                                    _currentSurface = DetectedSurfaceType.Wall;
+                                    hitWall = true;
+                                    break;
+                                }
+
+                                // Check for obstacle (table, desk higher than floor)
+                                if ((_isFloorLocked || _hasCalibratedFloor) && hit.pose.position.y > refFloorY + 0.28f && hit.distance < 4.0f)
+                                {
+                                    _currentSurface = DetectedSurfaceType.HorizontalPlane;
+                                    hitObstacle = true;
+                                    break;
+                                }
+
+                                // Valid horizontal floor plane hit
+                                if (IsValidFloorPlane(plane, hit.pose.position, cameraY))
+                                {
+                                    hitFloorPlaneObj = plane;
+                                    rawHitSpot = hit.pose.position;
+                                    rawHitDist = hit.distance;
+                                    hitFloorPlane = true;
+
+                                    if (!_isFloorLocked)
+                                    {
+                                        if (!_hasCalibratedFloor)
+                                        {
+                                            _hasCalibratedFloor = true;
+                                            _calibratedFloorY = hit.pose.position.y;
+                                            _calibratedFloorPlane = plane;
+                                            _currentFloorPlanePos = hit.pose.position;
+                                            Vector3 n = plane.normal;
+                                            _currentFloorNormal = (n.sqrMagnitude > 0.5f && n.y > 0.6f) ? n.normalized : Vector3.up;
+                                        }
+                                        else
+                                        {
+                                            // Smoothly blend reference floor normal & position
+                                            Vector3 n = plane.normal;
+                                            Vector3 validN = (n.sqrMagnitude > 0.5f && n.y > 0.6f) ? n.normalized : Vector3.up;
+                                            _currentFloorNormal = Vector3.Slerp(_currentFloorNormal, validN, 0.08f);
+                                            _currentFloorPlanePos = Vector3.Lerp(_currentFloorPlanePos, hit.pose.position, 0.08f);
+                                            _calibratedFloorY = Mathf.Lerp(_calibratedFloorY, hit.pose.position.y, 0.08f);
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (hitWall || hitObstacle || hitFloorPlane) break;
+                    }
+                }
             }
 
-            // STRICT FLOOR LOCK: Always ensure the hit coordinate lies flat on the authoritative floor plane
-            float effectiveFloorY = _isFloorLocked ? _lockedFloorY : _calibratedFloorY;
-            rawHitPos.y = effectiveFloorY;
-
-            // 2. VALID FLOOR HIT CONFIRMED
-            _hasValidFloorHit = true;
-            _currentHitPlane = _isFloorLocked ? (_lockedFloorPlane ?? bestPlane) : (bestPlane ?? _calibratedFloorPlane);
-            _currentSurface = DetectedSurfaceType.Floor;
-            _currentRawHitPos = rawHitPos;
-
-            // 3. RESPONSIVE RETICLE TRACKING
-            if (_stabilizedPosition == Vector3.zero || Vector3.Distance(_stabilizedPosition, rawHitPos) > 0.45f)
+            if (hitWall || hitObstacle)
             {
-                _stabilizedPosition = rawHitPos;
+                _hasValidFloorHit = false;
+                _currentRawHitPos = Vector3.zero;
+                _distanceFromCamera = 0f;
+                return;
+            }
+
+            // Unified Coplanar Floor Point calculation
+            // Intersects the center camera ray with the unified authoritative floor plane
+            float denom = Vector3.Dot(refFloorNormal, camFwd);
+            if (denom >= -0.002f)
+            {
+                _currentRawHitPos = Vector3.zero;
+                _distanceFromCamera = 0f;
+                return;
+            }
+
+            float t = Vector3.Dot(refFloorNormal, refFloorPos - camPos) / denom;
+            if (t < 0.10f || t > 60.0f)
+            {
+                _currentRawHitPos = Vector3.zero;
+                _distanceFromCamera = 0f;
+                return;
+            }
+
+            Vector3 unifiedFloorSpot = camPos + camFwd * t;
+
+            // When unlocked, smoothly incorporate physical hit; when locked, strictly follow coplanar reference
+            Vector3 finalSpot;
+            if (hitFloorPlane && !_isFloorLocked)
+            {
+                finalSpot = Vector3.Lerp(unifiedFloorSpot, rawHitSpot, 0.35f);
             }
             else
             {
-                _stabilizedPosition = Vector3.Lerp(_stabilizedPosition, rawHitPos, 0.70f);
+                finalSpot = unifiedFloorSpot;
             }
-            _stabilizedPosition.y = effectiveFloorY; // Strictly keep Y on the authoritative floor
 
-            _stabilizedPose = new Pose(_stabilizedPosition, Quaternion.identity);
-            _distanceFromCamera = Vector3.Distance(_arCamera.transform.position, _stabilizedPosition);
+            _hasValidFloorHit = (hitFloorPlane || _hasCalibratedFloor || _isFloorLocked);
+            _currentSurface = DetectedSurfaceType.Floor;
+            _currentHitPlane = hitFloorPlaneObj ?? (_isFloorLocked ? (_lockedFloorPlane ?? _calibratedFloorPlane) : _calibratedFloorPlane);
+            _currentFloorNormal = refFloorNormal;
+            _currentRawHitPos = finalSpot;
+            _distanceFromCamera = t;
+            _stabilizedPosition = finalSpot;
+            _stabilizedPose = new Pose(finalSpot, Quaternion.FromToRotation(Vector3.up, refFloorNormal));
 
-            // 4. STABILITY CHECK
-            float motionDelta = Vector3.Distance(rawHitPos, _stabilizedPosition);
-            _isPointStable = (motionDelta <= _stabilityTolerance);
+            // Velocity-based stability check
+            float motionDelta = Vector3.Distance(finalSpot, _lastFrameRawHitPos);
+            _lastFrameRawHitPos = finalSpot;
+            float dynamicTolerance = Mathf.Clamp(_distanceFromCamera * 0.025f, 0.035f, 0.22f);
+            _isPointStable = (motionDelta <= dynamicTolerance);
         }
 
-        /// <summary>
-        /// Evaluates whether an ARPlane is an upward-facing horizontal floor plane below the camera.
-        /// </summary>
         private bool IsValidFloorPlane(ARPlane plane, Vector3 hitPosition, float cameraY)
         {
             if (plane == null) return false;
 
-            // Must be horizontal up alignment
             if (plane.alignment != PlaneAlignment.HorizontalUp)
                 return false;
 
-            // Normal must point substantially upward (> 0.80)
-            if (plane.normal.y < 0.80f)
+            if (plane.normal.y < 0.60f)
                 return false;
 
-            // Floor must be below camera eye level (at least 30cm below camera)
-            if (hitPosition.y > cameraY - 0.30f)
+            // Floor must be below camera
+            if (hitPosition.y > cameraY - 0.20f)
                 return false;
 
             return true;
         }
 
-        private Vector3 CalculateBufferAverage()
-        {
-            if (_sampleBuffer.Count == 0) return Vector3.zero;
-
-            Vector3 sum = Vector3.zero;
-            foreach (var pos in _sampleBuffer)
-            {
-                sum += pos;
-            }
-            return sum / _sampleBuffer.Count;
-        }
-
         /// <summary>
-        /// Updates the 3D world-space reticle position, orientation, color, and billboarded status text.
-        /// Guaranteed to sit completely flat on the physical floor plane (never floating in the air).
+        /// Updates the 3D world-space reticle with critically-damped visual smoothing.
+        /// Glides across the floor like a high-end laser level without jitter, snapping, or lagging.
         /// </summary>
         private void Update3DReticleVisuals()
         {
@@ -450,38 +550,54 @@ namespace ARMiningSimulator.AR
                 targetColor = _trackingColor;
                 statusText = "TRACKING...";
                 _reticleRoot.transform.position = camPos + camFwd * 1.5f;
+                _reticleRoot.transform.localScale = Vector3.one * 0.35f;
                 _reticleRoot.transform.rotation = Quaternion.LookRotation(camFwd, Vector3.up);
             }
             else if (_hasValidFloorHit)
             {
-                // Sits completely flat on the calibrated physical floor plane (+0.003m to avoid z-fighting)
-                Vector3 floorPos = new Vector3(_stabilizedPosition.x, _calibratedFloorY + 0.003f, _stabilizedPosition.z);
-                _reticleRoot.transform.position = floorPos;
-                _reticleRoot.transform.rotation = Quaternion.identity; // Flat along X-Z ground plane
+                float visualScale = Mathf.Clamp(_distanceFromCamera * 0.12f, 0.20f, 1.8f);
+                Vector3 normal = (_currentFloorNormal.sqrMagnitude > 0.5f) ? _currentFloorNormal : Vector3.up;
+                Vector3 targetFloorPos = _stabilizedPosition + normal * 0.005f;
+                Quaternion targetFloorRot = Quaternion.FromToRotation(Vector3.up, normal);
+
+                if (!_hasInitializedReticle)
+                {
+                    _smoothedReticlePos = targetFloorPos;
+                    _smoothedReticleRot = targetFloorRot;
+                    _hasInitializedReticle = true;
+                }
+                else
+                {
+                    float dist = Vector3.Distance(_smoothedReticlePos, targetFloorPos);
+                    if (dist > _teleportThreshold)
+                    {
+                        // Rapid user whip: snap instantly to avoid trailing lag
+                        _smoothedReticlePos = targetFloorPos;
+                        _smoothedReticleRot = targetFloorRot;
+                    }
+                    else
+                    {
+                        // Critically-damped smooth glide
+                        float lerpT = Mathf.Clamp01(Time.deltaTime * _reticleLerpSpeed);
+                        _smoothedReticlePos = Vector3.Lerp(_smoothedReticlePos, targetFloorPos, lerpT);
+                        _smoothedReticleRot = Quaternion.Slerp(_smoothedReticleRot, targetFloorRot, lerpT);
+                    }
+                }
+
+                _reticleRoot.transform.position = _smoothedReticlePos;
+                _reticleRoot.transform.rotation = _smoothedReticleRot;
+                _reticleRoot.transform.localScale = Vector3.one * visualScale;
 
                 if (_isPointStable)
                 {
                     targetColor = _readyColor;
-                    statusText = "READY (CORNER)";
+                    statusText = $"READY ({_distanceFromCamera:F1}m)";
                 }
                 else
                 {
                     targetColor = _steadyColor;
                     statusText = "HOLD STEADY...";
                 }
-            }
-            else if (_hasCalibratedFloor && camFwd.y < -0.05f)
-            {
-                // Projecting onto calibrated floor plane even when aiming outside AR polygon boundary (e.g. wall corner)
-                float t = (_calibratedFloorY - camPos.y) / camFwd.y;
-                if (t > 0.2f && t < 25.0f)
-                {
-                    Vector3 floorPos = new Vector3(camPos.x + camFwd.x * t, _calibratedFloorY + 0.003f, camPos.z + camFwd.z * t);
-                    _reticleRoot.transform.position = floorPos;
-                    _reticleRoot.transform.rotation = Quaternion.identity;
-                }
-                targetColor = _steadyColor;
-                statusText = "POINT AT CORNER";
             }
             else
             {
@@ -493,61 +609,73 @@ namespace ARMiningSimulator.AR
                 else
                     statusText = "POINT DOWN AT FLOOR";
 
-                // In air only when user is pointing horizontally or up at ceiling
-                _reticleRoot.transform.position = camPos + camFwd * 1.5f;
-                _reticleRoot.transform.rotation = Quaternion.LookRotation(camFwd, Vector3.up);
+                Vector3 targetAirPos = camPos + camFwd * 1.5f;
+                Quaternion targetAirRot = Quaternion.LookRotation(camFwd, Vector3.up);
+
+                _reticleRoot.transform.position = targetAirPos;
+                _reticleRoot.transform.localScale = Vector3.one * 0.35f;
+                _reticleRoot.transform.rotation = targetAirRot;
             }
 
-            // Apply color
+            // Apply material color
             if (_reticleMaterial != null)
             {
                 _reticleMaterial.color = targetColor;
             }
 
-            // Update 3D status text label
+            // Update 3D billboard status text
             if (_reticleTextMesh != null && _reticleTextObj != null)
             {
                 _reticleTextMesh.text = statusText;
                 _reticleTextMesh.color = targetColor;
-
-                // Billboard text towards camera
+                _reticleTextObj.transform.localPosition = new Vector3(0f, 0.08f, 0f);
                 _reticleTextObj.transform.LookAt(_arCamera.transform);
                 _reticleTextObj.transform.Rotate(0, 180, 0);
             }
         }
 
         /// <summary>
-        /// Always returns the exact 3D floor coordinate currently targeted at the center of the screen.
-        /// Strictly calibrated to the physical floor plane (never floating in the air).
+        /// Always returns the exact 3D floor coordinate currently targeted by the smoothed reticle.
+        /// Guaranteed to match what the user is seeing on screen, with exact floor elevation.
         /// </summary>
         public Vector3 GetBestFloorSpot()
         {
-            float targetFloorY = _isFloorLocked ? _lockedFloorY : (_hasCalibratedFloor ? _calibratedFloorY : 0f);
-
-            if (_hasValidFloorHit && _currentRawHitPos != Vector3.zero)
+            if (_hasValidFloorHit)
             {
-                float floorY = (_isFloorLocked || _hasCalibratedFloor) ? targetFloorY : _currentRawHitPos.y;
-                return new Vector3(_currentRawHitPos.x, floorY, _currentRawHitPos.z);
+                // Subtract visual lift (+0.005m) to yield the exact ground plane contact
+                if (_hasInitializedReticle && _smoothedReticlePos != Vector3.zero)
+                {
+                    Vector3 normal = (_currentFloorNormal.sqrMagnitude > 0.5f) ? _currentFloorNormal : Vector3.up;
+                    return _smoothedReticlePos - normal * 0.005f;
+                }
+
+                if (_stabilizedPosition != Vector3.zero)
+                {
+                    return _stabilizedPosition;
+                }
+
+                if (_currentRawHitPos != Vector3.zero)
+                {
+                    return _currentRawHitPos;
+                }
             }
 
-            if (_hasValidFloorHit && _stabilizedPosition != Vector3.zero)
-            {
-                float floorY = (_isFloorLocked || _hasCalibratedFloor) ? targetFloorY : _stabilizedPosition.y;
-                return new Vector3(_stabilizedPosition.x, floorY, _stabilizedPosition.z);
-            }
-
+            // Fallback: Analytical ray-plane intersection against calibrated floor
             if (_arCamera != null)
             {
                 Vector3 camPos = _arCamera.transform.position;
                 Vector3 camFwd = _arCamera.transform.forward;
-                float floorY = (_isFloorLocked || _hasCalibratedFloor) ? targetFloorY : (camPos.y - 1.35f);
+                Vector3 normal = _isFloorLocked ? _lockedFloorNormal : (_hasCalibratedFloor ? _currentFloorNormal : Vector3.up);
+                float floorY = _isFloorLocked ? _lockedFloorY : (_hasCalibratedFloor ? _calibratedFloorY : (camPos.y - 1.35f));
+                Vector3 pos = _isFloorLocked ? _lockedFloorPos : new Vector3(camPos.x, floorY, camPos.z);
 
-                if (camFwd.y < -0.05f)
+                float denom = Vector3.Dot(normal, camFwd);
+                if (denom < -0.002f)
                 {
-                    float t = (floorY - camPos.y) / camFwd.y;
-                    if (t > 0.2f && t < 25.0f)
+                    float t = Vector3.Dot(normal, pos - camPos) / denom;
+                    if (t >= 0.10f && t <= 60.0f)
                     {
-                        return new Vector3(camPos.x + camFwd.x * t, floorY, camPos.z + camFwd.z * t);
+                        return camPos + camFwd * t;
                     }
                 }
 

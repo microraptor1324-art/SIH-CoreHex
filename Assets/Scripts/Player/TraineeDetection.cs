@@ -43,6 +43,7 @@ namespace ARMiningSimulator.Player
         public bool HasDetectedFire => _hasDetectedFire;
         public float DwellProgress => _dwellProgress;
         public float ReactionTime => _reactionTimer;
+        public bool IsTimerRunning => _isTimerRunning;
         public FireHazard CurrentTargetHazard => _currentTargetHazard;
         public FireHazard ConfirmedHazard => _confirmedHazard;
 
@@ -62,9 +63,31 @@ namespace ARMiningSimulator.Player
             }
         }
 
-        private void Start()
+        private void OnEnable()
+        {
+            FireManager.OnFireIgnited += HandleFireIgnited;
+        }
+
+        private void OnDisable()
+        {
+            FireManager.OnFireIgnited -= HandleFireIgnited;
+        }
+
+        private void HandleFireIgnited(FireHazard hazard)
         {
             StartStopwatch();
+        }
+
+        private void Start()
+        {
+            // Do not run stopwatch until a fire actually ignites
+            _reactionTimer = 0f;
+            _isTimerRunning = false;
+            _hasDetectedFire = false;
+            _confirmedHazard = null;
+            _dwellTimer = 0f;
+            _dwellProgress = 0f;
+            _currentTargetHazard = null;
         }
 
         public void StartStopwatch()
@@ -129,18 +152,19 @@ namespace ARMiningSimulator.Player
                 float angle = Vector3.Angle(camForward, toTarget);
                 if (angle > _maxAlignmentAngle) continue;
 
-                // 2. Viewport Frustum Check (within central 60% of camera screen)
+                // 2. Viewport Frustum Check (within central 70% of camera screen)
                 Vector3 vp = _traineeCamera.WorldToViewportPoint(targetPoint);
                 if (vp.z <= 0.1f) continue; // Behind camera
-                if (vp.x < 0.20f || vp.x > 0.80f || vp.y < 0.20f || vp.y > 0.80f) continue;
+                if (vp.x < 0.15f || vp.x > 0.85f || vp.y < 0.15f || vp.y > 0.85f) continue;
 
                 // 3. Line of Sight Raycast
-                if (Physics.Raycast(camPos, toTarget.normalized, out RaycastHit hit, distance, ~0, QueryTriggerInteraction.Ignore))
+                if (Physics.Raycast(camPos, toTarget.normalized, out RaycastHit hit, distance, ~0, QueryTriggerInteraction.Collide))
                 {
                     // Check if hit object is part of the hazard or its equipment
                     bool hitHazardOrParent = hit.collider.transform.IsChildOf(hazard.transform) ||
                                             hazard.transform.IsChildOf(hit.collider.transform) ||
-                                            Vector3.Distance(hit.point, targetPoint) < 0.8f;
+                                            (hazard.FireSource != null && (hit.collider.transform.IsChildOf(hazard.FireSource.transform) || hazard.FireSource.transform.IsChildOf(hit.collider.transform))) ||
+                                            Vector3.Distance(hit.point, targetPoint) < 1.0f;
                     if (!hitHazardOrParent)
                     {
                         // Blocked by an obstacle

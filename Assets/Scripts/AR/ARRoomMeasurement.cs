@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
+using ARMiningSimulator.Mining;
 
 namespace ARMiningSimulator.AR
 {
@@ -22,7 +23,7 @@ namespace ARMiningSimulator.AR
     /// Authoritative Master AR Room Measurement System.
     /// Strictly limits measurement to a normal rectangular room using EXACTLY 4 FLAGS.
     /// Follows the real AR measuring app principle:
-    /// SCAN FLOOR -> POINT AT CORNER -> ADD FLAG (1/4) -> (2/4) -> (3/4) -> (4/4) -> CLOSE ROOM -> SHADE FLOOR -> RECTANGULAR ANALYSIS.
+    /// SCAN FLOOR -> POINT AT CORNER -> ADD FLAG (1/4) -> (2/4) -> (3/4) -> (4/4) -> CLOSE ROOM -> SHADE FLOOR -> RECTANGULAR ANALYSIS -> GENERATE MINE ENVIRONMENT.
     /// </summary>
     [RequireComponent(typeof(ARRaycastController))]
     [RequireComponent(typeof(ARFlagManager))]
@@ -35,6 +36,8 @@ namespace ARMiningSimulator.AR
         [SerializeField] private ARFlagManager _flagManager;
         [SerializeField] private MeasurementLineManager _lineManager;
         [SerializeField] private RoomPolygonManager _polygonManager;
+        [SerializeField] private UndergroundMineGenerator _mineGenerator;
+        [SerializeField] private bool _autoGenerateOnClose = false;
 
         [Header("AR Foundation References")]
         [SerializeField] private ARSession _arSession;
@@ -82,6 +85,7 @@ namespace ARMiningSimulator.AR
         public ARRaycastController RaycastController => _raycastController;
         public ARFlagManager FlagManager => _flagManager;
         public MeasurementLineManager LineManager => _lineManager;
+        public UndergroundMineGenerator MineGenerator => _mineGenerator;
         public string StatusMessage => _statusMessage;
 
         private void Awake()
@@ -99,6 +103,8 @@ namespace ARMiningSimulator.AR
                 _lineManager = GetComponent<MeasurementLineManager>() ?? gameObject.AddComponent<MeasurementLineManager>();
             if (_polygonManager == null)
                 _polygonManager = GetComponent<RoomPolygonManager>() ?? gameObject.AddComponent<RoomPolygonManager>();
+            if (_mineGenerator == null)
+                _mineGenerator = GetComponent<UndergroundMineGenerator>();
 
             if (_arSession == null)
                 _arSession = FindAnyObjectByType<ARSession>();
@@ -251,18 +257,14 @@ namespace ARMiningSimulator.AR
                 return false;
             }
 
-            // Strictly lock the flag's vertical elevation to the authoritative/calibrated floor plane
-            float floorY = _raycastController.IsFloorLocked ? _raycastController.LockedFloorY :
-                          (_raycastController.HasCalibratedFloor ? _raycastController.CalibratedFloorY : hitPos.y);
-            hitPos = new Vector3(hitPos.x, floorY, hitPos.z);
-
+            float floorY = hitPos.y;
             Pose hitPose = new Pose(hitPos, Quaternion.identity);
             ARPlane hitPlane = _raycastController.CurrentHitPlane ?? _raycastController.CalibratedFloorPlane;
 
             // Lock authoritative floor plane upon confirming Corner 1
             if (_flagManager.Count == 0 && _raycastController != null)
             {
-                _raycastController.LockFloorPlane(hitPlane, floorY);
+                _raycastController.LockFloorPlane(hitPlane, floorY, _raycastController.CurrentFloorNormal, hitPos);
             }
 
             // 1. Add persistent anchored 3D surveyor flag
@@ -330,13 +332,28 @@ namespace ARMiningSimulator.AR
                 _lineManager.ConnectClosingSegment(flag4Pos, flag1Pos);
             }
 
-            // 3. Generate procedural flat shaded floor mesh covering the 4 points with 50% blue shade
+            // 3. Generate procedural flat shaded floor mesh covering the 4 points with blue shade & fading walls
             _polygonManager.CreateShadedFloorPolygon(points);
 
             // 4. Analyze rectangular room geometry and compute area
             _rectAnalysis = RoomAreaCalculator.AnalyzeRectangle(points);
             _geometryResult = RoomAreaCalculator.CalculateGeometry(points);
             _isRoomClosed = true;
+
+            var roomData = new RoomData(
+                _geometryResult.Length,
+                _geometryResult.Width,
+                _geometryResult.Center,
+                _geometryResult.Rotation,
+                points.ToArray(),
+                confirmed: false
+            );
+            RoomData.SetCurrent(roomData);
+
+            if (_autoGenerateOnClose)
+            {
+                GenerateMineEnvironment();
+            }
 
             SetState(MeasurementSystemState.RoomClosed);
             OnDimensionsChanged?.Invoke(_geometryResult.Length, _geometryResult.Width, _geometryResult.Area);
@@ -413,6 +430,10 @@ namespace ARMiningSimulator.AR
                 // Re-open room and remove Flag 4 so user can re-measure corner 4
                 _isRoomClosed = false;
                 _polygonManager.ClearShadedFloorPolygon();
+                if (_mineGenerator != null) _mineGenerator.ClearEnvironment();
+                SetARSubsystemsScanningMode(true);
+                if (_flagManager != null) _flagManager.SetFlagsVisible(true);
+                if (_lineManager != null) _lineManager.SetLinesVisible(true);
                 _lineManager.RemoveLastSegment(); // Removes closing segment P4 -> P1
                 _flagManager.RemoveLastFlag();    // Removes Flag 4
                 _lineManager.RemoveLastSegment(); // Removes segment P3 -> P4
@@ -442,17 +463,21 @@ namespace ARMiningSimulator.AR
         }
 
         /// <summary>
-        /// Completely clears all flags, AR anchors, line segments, distance labels, and floor shaded mesh.
+        /// Completely clears all flags, AR anchors, line segments, distance labels, floor shaded mesh, and mining environment.
+        /// Restores active floor scanning, reticle, and plane trackables.
         /// </summary>
         public void ResetMeasurement()
         {
             _flagManager.ClearAllFlags();
             _lineManager.ClearAllLines();
             _polygonManager.ClearShadedFloorPolygon();
+            if (_mineGenerator != null) _mineGenerator.ClearEnvironment();
             if (_raycastController != null)
             {
                 _raycastController.UnlockFloorPlane();
             }
+
+            SetARSubsystemsScanningMode(true);
 
             _isRoomClosed = false;
             _isConfirmed = false;
@@ -467,7 +492,74 @@ namespace ARMiningSimulator.AR
         }
 
         /// <summary>
-        /// Confirms measurement and exports RoomData to spawn downstream SIH mining scenario.
+        /// Generates the underground mining environment inside the measured room box.
+        /// Freezes background plane tracking and reticle raycasting to eliminate thermal throttling and tracking jitter.
+        /// </summary>
+        public void GenerateMineEnvironment()
+        {
+            if (!_isRoomClosed) return;
+
+            var roomData = RoomData.Current;
+            if (roomData == null || !roomData.IsValid) return;
+
+            // Freeze background plane detection, reticle raycasting, and occlusion depth to maximize frame rate and 6-DoF stability
+            SetARSubsystemsScanningMode(false);
+
+            if (_mineGenerator != null)
+            {
+                _mineGenerator.GenerateEnvironment(roomData);
+            }
+
+            // User requirement: After the mining environment is generated, remove the blue shade and the flags
+            if (_polygonManager != null)
+            {
+                _polygonManager.ClearShadedFloorPolygon();
+            }
+
+            if (_flagManager != null)
+            {
+                _flagManager.SetFlagsVisible(false);
+            }
+
+            if (_lineManager != null)
+            {
+                _lineManager.SetLinesVisible(false);
+            }
+
+            Debug.Log("[ARRoomMeasurement] Mining environment active: background tracking frozen, blue shading and flags removed.");
+        }
+
+        /// <summary>
+        /// Controls AR Foundation tracking subsystems between active scanning and stable simulation playback.
+        /// When scanning is false: disables plane polygonization, raycasting, and depth occlusion to prevent thermal lag and tracking loss.
+        /// </summary>
+        private void SetARSubsystemsScanningMode(bool scanning)
+        {
+            if (_planeManager != null)
+            {
+                _planeManager.requestedDetectionMode = scanning ? PlaneDetectionMode.Horizontal : PlaneDetectionMode.None;
+                _planeManager.enabled = scanning;
+                foreach (var plane in _planeManager.trackables)
+                {
+                    if (plane != null) plane.gameObject.SetActive(scanning);
+                }
+            }
+
+            if (_raycastController != null)
+            {
+                _raycastController.enabled = scanning;
+                _raycastController.SetReticleActive(scanning);
+            }
+
+            if (_occlusionManager != null)
+            {
+                _occlusionManager.requestedEnvironmentDepthMode = scanning ? EnvironmentDepthMode.Fastest : EnvironmentDepthMode.Disabled;
+                _occlusionManager.enabled = scanning;
+            }
+        }
+
+        /// <summary>
+        /// Confirms measurement, generates the underground mining environment, and exports RoomData.
         /// </summary>
         public bool ConfirmMeasurement()
         {
@@ -490,6 +582,10 @@ namespace ARMiningSimulator.AR
             );
 
             RoomData.SetCurrent(roomData);
+
+            // Generate mine environment and remove the blue shade & flags
+            GenerateMineEnvironment();
+
             OnMeasurementConfirmed?.Invoke(roomData);
 
             Debug.Log($"[ARRoomMeasurement] Room measurement confirmed! Area={roomData.Area:F2}m², Length={roomData.Length:F2}m, Width={roomData.Width:F2}m");

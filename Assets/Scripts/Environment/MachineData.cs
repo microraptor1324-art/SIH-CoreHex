@@ -7,9 +7,9 @@ namespace ARMiningSimulator.Environment
         MiningDrill,
         Conveyor,
         Excavator,
-        RockCrusher,
-        Generator,
-        IndustrialMotor
+        ContinuousMiner,
+        Scooptram,
+        RoofBolter
     }
 
     /// <summary>

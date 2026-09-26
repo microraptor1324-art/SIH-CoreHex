@@ -18,6 +18,7 @@ using ARMiningSimulator.Extinguisher;
 using ARMiningSimulator.Investigation;
 using ARMiningSimulator.Progression;
 using ARMiningSimulator.UI;
+using ARMiningSimulator.Mining;
 
 namespace ARMiningSimulator.Editor
 {
@@ -36,9 +37,11 @@ namespace ARMiningSimulator.Editor
             {
                 if (EditorApplication.isPlayingOrWillChangePlaymode) return;
 
-                if (!File.Exists(ScenePath))
+                // Automatically ensure Phase 10 scene contains all required surveyor and mining components
+                string sceneText = File.Exists(ScenePath) ? File.ReadAllText(ScenePath) : "";
+                if (!sceneText.Contains("ARFlagManager") || !sceneText.Contains("MiningEnvironmentUI") || !sceneText.Contains("MiningEnvironmentGenerator"))
                 {
-                    Debug.Log("[AR Setup] Auto-generating Phase 10 Master Simulation Scene...");
+                    Debug.Log("[AR Setup] Auto-generating / updating Phase 10 Master Simulation Scene with all required components...");
                     RunPhase10SetupSilently();
                     Debug.Log("[AR Setup] Phase 10 Master Scene generated at " + ScenePath);
                 }
@@ -158,6 +161,7 @@ namespace ARMiningSimulator.Editor
             var flagManager = xrOriginGo.AddComponent<ARFlagManager>();
             var lineManager = xrOriginGo.AddComponent<MeasurementLineManager>();
             var polygonManager = xrOriginGo.AddComponent<RoomPolygonManager>();
+            var mineGenerator = xrOriginGo.AddComponent<UndergroundMineGenerator>();
             var measurement = xrOriginGo.AddComponent<ARRoomMeasurement>();
             var scanner = xrOriginGo.AddComponent<ARRoomScanner>();
             var roomUI = xrOriginGo.AddComponent<RoomMeasurementUI>();
@@ -167,6 +171,7 @@ namespace ARMiningSimulator.Editor
             soMeasurement.FindProperty("_flagManager").objectReferenceValue = flagManager;
             soMeasurement.FindProperty("_lineManager").objectReferenceValue = lineManager;
             soMeasurement.FindProperty("_polygonManager").objectReferenceValue = polygonManager;
+            soMeasurement.FindProperty("_mineGenerator").objectReferenceValue = mineGenerator;
             soMeasurement.FindProperty("_planeManager").objectReferenceValue = planeManager;
             soMeasurement.FindProperty("_arCamera").objectReferenceValue = cam;
             var sessionProp = soMeasurement.FindProperty("_arSession");
@@ -220,9 +225,15 @@ namespace ARMiningSimulator.Editor
             var evacuationHUD = xrOriginGo.AddComponent<EvacuationHUD>();
             var extinguisherHUD = xrOriginGo.AddComponent<ExtinguisherHUD>();
             var investigationUI = xrOriginGo.AddComponent<InvestigationAndScoreUI>();
+            var miningUI = xrOriginGo.AddComponent<MiningEnvironmentUI>();
             var mainMenuUI = xrOriginGo.AddComponent<MainMenuUI>();
 
             // Connect serialized fields
+            SerializedObject soMiningUI = new SerializedObject(miningUI);
+            soMiningUI.FindProperty("_generator").objectReferenceValue = generator;
+            soMiningUI.FindProperty("_arCamera").objectReferenceValue = cam;
+            soMiningUI.ApplyModifiedProperties();
+
             SerializedObject soGen = new SerializedObject(generator);
             soGen.FindProperty("_equipmentSpawner").objectReferenceValue = spawner;
             soGen.FindProperty("_arCamera").objectReferenceValue = cam;
@@ -233,6 +244,8 @@ namespace ARMiningSimulator.Editor
             SerializedObject soFire = new SerializedObject(fireManager);
             soFire.FindProperty("_equipmentSpawner").objectReferenceValue = spawner;
             soFire.FindProperty("_spreadSystem").objectReferenceValue = spreadSystem;
+            var autoFireProp = soFire.FindProperty("_autoStartOnEnvironmentReady");
+            if (autoFireProp != null) autoFireProp.boolValue = false;
             soFire.ApplyModifiedProperties();
 
             SerializedObject soExting = new SerializedObject(extinguisherCtrl);

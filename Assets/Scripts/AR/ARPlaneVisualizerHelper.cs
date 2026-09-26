@@ -57,11 +57,30 @@ namespace ARMiningSimulator.AR
             }
         }
 
-        private void Update()
+        private void OnEnable()
         {
-            if (_arPlane == null) return;
+            if (_arPlane != null)
+            {
+                _arPlane.boundaryChanged += OnBoundaryChanged;
+            }
+            EnforceSuppression();
+        }
 
-            // Never allow missing-shader pink plane meshes to render on the floor
+        private void OnDisable()
+        {
+            if (_arPlane != null)
+            {
+                _arPlane.boundaryChanged -= OnBoundaryChanged;
+            }
+        }
+
+        private void OnBoundaryChanged(ARPlaneBoundaryChangedEventArgs args)
+        {
+            EnforceSuppression();
+        }
+
+        private void EnforceSuppression()
+        {
             if (!_renderFloorMesh)
             {
                 if (_meshRenderer != null && _meshRenderer.enabled) _meshRenderer.enabled = false;

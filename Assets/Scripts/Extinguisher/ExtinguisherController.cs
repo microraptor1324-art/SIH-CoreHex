@@ -214,6 +214,12 @@ namespace ARMiningSimulator.Extinguisher
                     // Apply suppression
                     hazard.Extinguish(suppressionAmount);
 
+                    // If fire is Big (>60s / 1 minute), it is not extinguishable by portable canister
+                    if (!hazard.IsExtinguishable)
+                    {
+                        TraineeHealth.Instance?.ApplyDamage(15f * Time.deltaTime, "INTENSE RADIANT HEAT: Big fire cannot be fought! Retreat to Safety Area!");
+                    }
+
                     if (!hazard.IsIgnited)
                     {
                         Debug.Log($"[ExtinguisherController] 🔥 Fire suppressed on {hazard.TargetName}!");

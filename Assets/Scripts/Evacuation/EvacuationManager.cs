@@ -9,7 +9,7 @@ namespace ARMiningSimulator.Evacuation
     /// <summary>
     /// Coordinates the real-time underground mine evacuation phase:
     /// - Activates 3D animated path arrows to Emergency Exit and Safe Zone.
-    /// - Tracks remaining evacuation time (30s window before critical smoke levels).
+    /// - Tracks remaining evacuation time (60s window before critical smoke levels).
     /// - Detects trainee physical arrival on the green Safe Zone pad (radius <= 1.25m).
     /// - Halts health damage upon arrival and awards speed bonus scores.
     /// </summary>
@@ -18,7 +18,7 @@ namespace ARMiningSimulator.Evacuation
         public static EvacuationManager Instance { get; private set; }
 
         [Header("Evacuation Settings")]
-        [SerializeField] private float _countdownLimit = 30f;
+        [SerializeField] private float _countdownLimit = 60f;
         [SerializeField] private float _safeZoneRadius = 1.25f;
 
         [Header("References")]
@@ -48,6 +48,8 @@ namespace ARMiningSimulator.Evacuation
         public float CountdownLimit => _countdownLimit;
         public float DistanceToSafeZone => _currentDistanceToSafeZone;
         public int SpeedBonusScore => _speedBonusScore;
+        public Vector3 SafeZonePosition => _safeZonePosition;
+        public Vector3 ExitPosition => _exitPosition;
 
         private void Awake()
         {
@@ -81,7 +83,7 @@ namespace ARMiningSimulator.Evacuation
 
         private void HandleDecisionsCompleted()
         {
-            // Begin evacuation immediately once decisions conclude
+            // Begin evacuation immediately to Safe Area once decisions conclude
             StartEvacuation();
         }
 

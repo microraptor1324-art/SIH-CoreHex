@@ -31,8 +31,23 @@ namespace ARMiningSimulator.UI
         [SerializeField] private UnityEngine.UI.Button _undoButton;
         [SerializeField] private UnityEngine.UI.Button _resetButton;
 
-        // Debug Panel Toggle (Requirement 23)
-        private bool _showDebugPanel = true;
+        // Debug Panel Toggle (Requirement 23) - Clean default (hidden)
+        private bool _showDebugPanel = false;
+
+        // Custom cached textures & styles for clean, modern aesthetic
+        private Texture2D _panelTex;
+        private Texture2D _pillTex;
+        private GUIStyle _topTitleStyle;
+        private GUIStyle _instructionStyle;
+        private GUIStyle _subMetaStyle;
+        private GUIStyle _areaResultStyle;
+        private GUIStyle _mainBtnStyle;
+        private GUIStyle _subBtnStyle;
+        private GUIStyle _confirmedActiveStyle;
+        private GUIStyle _pendingStyle;
+        private GUIStyle _overlayBtnStyle;
+        private GUIStyle _dbgToggleBtnStyle;
+        private bool _stylesInitialized = false;
 
         // Input debouncing & feedback
         private float _lastTapTime = 0f;
@@ -120,33 +135,174 @@ namespace ARMiningSimulator.UI
             }
         }
 
+        private void InitStyles()
+        {
+            if (_stylesInitialized) return;
+
+            _panelTex = MakeColorTex(new Color(0.06f, 0.08f, 0.12f, 0.90f));
+            _pillTex = MakeColorTex(new Color(0.04f, 0.06f, 0.09f, 0.92f));
+
+            _topTitleStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 17,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = new Color(1.0f, 0.82f, 0.20f) } // Safety Gold
+            };
+
+            _instructionStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 15,
+                fontStyle = FontStyle.Bold,
+                wordWrap = true,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = Color.white }
+            };
+
+            _subMetaStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 13,
+                fontStyle = FontStyle.Normal,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = new Color(0.78f, 0.84f, 0.92f) }
+            };
+
+            _areaResultStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 18,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = new Color(0.22f, 1.0f, 0.52f) } // Vivid Emerald
+            };
+
+            _mainBtnStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 19,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+
+            _subBtnStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 15,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+
+            _confirmedActiveStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 15,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = new Color(0.22f, 1.0f, 0.52f) }
+            };
+
+            _pendingStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = new Color(0.98f, 0.82f, 0.20f) }
+            };
+
+            _overlayBtnStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 13,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter
+            };
+
+            _dbgToggleBtnStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 11,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = new Color(0.8f, 0.85f, 0.9f) }
+            };
+
+            _stylesInitialized = true;
+        }
+
+        private Texture2D MakeColorTex(Color col)
+        {
+            var tex = new Texture2D(1, 1);
+            tex.SetPixel(0, 0, col);
+            tex.Apply();
+            return tex;
+        }
+
+        private void OnDestroy()
+        {
+            if (_panelTex != null) Destroy(_panelTex);
+            if (_pillTex != null) Destroy(_pillTex);
+        }
+
+        private void DrawPanelBox(Rect r)
+        {
+            if (_panelTex != null) GUI.DrawTexture(r, _panelTex);
+            // 1px sleek border
+            Color oldCol = GUI.color;
+            GUI.color = new Color(0.20f, 0.28f, 0.40f, 0.70f);
+            GUI.DrawTexture(new Rect(r.x, r.y, r.width, 1), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(r.x, r.yMax - 1, r.width, 1), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(r.x, r.y, 1, r.height), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(r.xMax - 1, r.y, 1, r.height), Texture2D.whiteTexture);
+            GUI.color = oldCol;
+        }
+
+        private void DrawPillBadge(Rect r, Color textColor, string text)
+        {
+            if (_pillTex != null) GUI.DrawTexture(r, _pillTex);
+            Color oldCol = GUI.color;
+            GUI.color = new Color(textColor.r, textColor.g, textColor.b, 0.55f);
+            GUI.DrawTexture(new Rect(r.x, r.y, r.width, 1), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(r.x, r.yMax - 1, r.width, 1), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(r.x, r.y, 1, r.height), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(r.xMax - 1, r.y, 1, r.height), Texture2D.whiteTexture);
+            GUI.color = oldCol;
+
+            GUIStyle badgeLabel = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 13,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = textColor }
+            };
+            GUI.Label(r, text, badgeLabel);
+        }
+
         /// <summary>
-        /// Responsive OnGUI Mobile Measuring HUD.
+        /// Clean, responsive, and beautifully aligned Mobile AR Measuring HUD.
         /// </summary>
         private void OnGUI()
         {
             // Only draw OnGUI if uGUI elements are not bound
             if (_lengthText != null && _areaText != null) return;
 
-            // Hide HUD once confirmed or when gameplay simulation starts
-            if (_measurement != null && _measurement.IsConfirmed) return;
+            InitStyles();
+
+            int screenW = Screen.width;
+            int screenH = Screen.height;
+
+            // When measurement is confirmed and mine environment is active, show clean minimal re-scan bar
+            if (_measurement != null && _measurement.IsConfirmed)
+            {
+                DrawConfirmedOverlay(screenW, screenH);
+                return;
+            }
+
             if (ARMiningSimulator.Core.SimulationGameLoop.Instance != null &&
                 ARMiningSimulator.Core.SimulationGameLoop.Instance.CurrentStage != ARMiningSimulator.Core.SimulationStage.ScanningRoom)
             {
                 return;
             }
 
-            int screenW = Screen.width;
-            int screenH = Screen.height;
-            int pad = 20;
-            int cardW = Mathf.Min(screenW - pad * 2, 720);
-
             // Screen Tap Handler: Allows user to tap screen to place corner
             Event e = Event.current;
             if (e != null && e.type == EventType.MouseDown && e.button == 0)
             {
                 // Exclude bottom action deck and top status card
-                if (e.mousePosition.y > screenH * 0.22f && e.mousePosition.y < screenH * 0.78f)
+                if (e.mousePosition.y > 130f && e.mousePosition.y < screenH - 150f)
                 {
                     if (_measurement != null && _measurement.FlagCount < 4 && !_measurement.IsRoomClosed)
                     {
@@ -173,23 +329,19 @@ namespace ARMiningSimulator.UI
             // 1b. Temporary Invalid Surface Tap Notice
             if (Time.unscaledTime - _invalidTapNoticeTime < 2.2f)
             {
-                GUIStyle warningStyle = new GUIStyle(GUI.skin.box)
-                {
-                    fontSize = 17,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter,
-                    normal = { textColor = new Color(1.0f, 0.35f, 0.35f) }
-                };
-                GUI.Label(new Rect(screenW * 0.5f - 160, screenH * 0.5f + 65, 320, 36), "Please tap on the detected floor.", warningStyle);
+                float noticeW = 320f;
+                float noticeH = 34f;
+                Rect noticeRect = new Rect((screenW - noticeW) * 0.5f, screenH * 0.5f + 65f, noticeW, noticeH);
+                DrawPillBadge(noticeRect, new Color(1.0f, 0.40f, 0.40f), "Please point at detected floor first");
             }
 
-            // 2. TOP STATUS BAR & INSTRUCTION CARD
-            DrawTopStatusCard(pad, cardW);
+            // 2. TOP STATUS BAR & INSTRUCTION CARD (Centered & Sleek)
+            DrawTopStatusCard(screenW);
 
-            // 3. BOTTOM ACTION DECK
-            DrawBottomActionDeck(pad, screenH, cardW);
+            // 3. BOTTOM ACTION DECK (Place Flag, Undo, Reset in Center Bottom)
+            DrawBottomActionDeck(screenW, screenH);
 
-            // 4. DEVELOPMENT/DEBUG PANEL (Requirement 23)
+            // 4. DEVELOPMENT/DEBUG PANEL (Hidden by default, subtle toggle in top right)
             DrawDebugPanel(screenW, screenH);
         }
 
@@ -197,7 +349,7 @@ namespace ARMiningSimulator.UI
         {
             float cx = screenW * 0.5f;
             float cy = screenH * 0.5f;
-            float reticleSize = 24f;
+            float reticleSize = 22f;
 
             bool tracking = _measurement != null && _measurement.IsTrackingStable;
             bool floorHit = _measurement != null && _measurement.RaycastController != null && _measurement.RaycastController.HasValidFloorHit;
@@ -209,262 +361,405 @@ namespace ARMiningSimulator.UI
 
             if (!tracking)
             {
-                reticleColor = new Color(1.0f, 0.55f, 0.1f, 0.85f); // Orange
-                statusBadge = "TRACKING...";
+                reticleColor = new Color(1.0f, 0.55f, 0.1f, 0.90f); // Orange
+                statusBadge = "INITIALIZING...";
             }
             else if (floorHit)
             {
                 if (isStable)
                 {
-                    reticleColor = new Color(0.15f, 0.95f, 0.45f, 0.95f); // Vivid Green
-                    statusBadge = "READY";
+                    reticleColor = new Color(0.15f, 0.95f, 0.50f, 0.95f); // Vivid Emerald Green
+                    statusBadge = "FLOOR READY";
                 }
                 else
                 {
-                    reticleColor = new Color(0.95f, 0.85f, 0.15f, 0.95f); // Yellow/Amber
+                    reticleColor = new Color(0.98f, 0.82f, 0.15f, 0.95f); // Amber
                     statusBadge = "HOLD STEADY...";
                 }
             }
             else if (hasCalib)
             {
-                reticleColor = new Color(0.95f, 0.85f, 0.15f, 0.95f); // Amber
-                statusBadge = "POINT AT CORNER";
+                reticleColor = new Color(0.95f, 0.80f, 0.20f, 0.90f);
+                statusBadge = "AIM AT CORNER";
             }
             else
             {
-                reticleColor = new Color(0.95f, 0.25f, 0.25f, 0.75f); // Red
+                reticleColor = new Color(0.95f, 0.30f, 0.30f, 0.80f); // Soft Red
                 statusBadge = "POINT AT FLOOR";
             }
 
             Color oldColor = GUI.color;
             GUI.color = reticleColor;
 
-            // Reticle Crosshairs
-            GUI.DrawTexture(new Rect(cx - reticleSize, cy - 2f, reticleSize * 2f, 4f), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(cx - 2f, cy - reticleSize, 4f, reticleSize * 2f), Texture2D.whiteTexture);
+            // Reticle Crosshairs (thin high-precision lines)
+            GUI.DrawTexture(new Rect(cx - reticleSize, cy - 1.5f, reticleSize * 2f, 3f), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(cx - 1.5f, cy - reticleSize, 3f, reticleSize * 2f), Texture2D.whiteTexture);
 
             // Central Ring Outline
-            float ringRadius = 14f;
+            float ringRadius = 12f;
             GUI.DrawTexture(new Rect(cx - ringRadius, cy - ringRadius, ringRadius * 2f, 2f), Texture2D.whiteTexture);
             GUI.DrawTexture(new Rect(cx - ringRadius, cy + ringRadius - 2f, ringRadius * 2f, 2f), Texture2D.whiteTexture);
             GUI.DrawTexture(new Rect(cx - ringRadius, cy - ringRadius, 2f, ringRadius * 2f), Texture2D.whiteTexture);
             GUI.DrawTexture(new Rect(cx + ringRadius - 2f, cy - ringRadius, 2f, ringRadius * 2f), Texture2D.whiteTexture);
 
-            // Distance / Status Badge directly below crosshair
-            GUIStyle badgeStyle = new GUIStyle(GUI.skin.box)
-            {
-                fontSize = 17,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = reticleColor }
-            };
+            GUI.color = oldColor;
 
+            // Badge directly below crosshair with dark frosted backdrop
             float dist = (_measurement != null && _measurement.RaycastController != null)
                 ? _measurement.RaycastController.DistanceFromCamera
                 : 0f;
 
-            string badgeText = floorHit ? $"{statusBadge}  ({dist:F2} m)" : statusBadge;
-            GUI.Label(new Rect(cx - 110, cy + reticleSize + 14, 220, 32), badgeText, badgeStyle);
+            string badgeText = floorHit ? $"{statusBadge}  •  {dist:F2} m" : statusBadge;
+            float badgeW = 210f;
+            float badgeH = 28f;
+            Rect badgeRect = new Rect(cx - (badgeW * 0.5f), cy + reticleSize + 12f, badgeW, badgeH);
 
-            GUI.color = oldColor;
+            DrawPillBadge(badgeRect, reticleColor, badgeText);
         }
 
-        private void DrawTopStatusCard(int pad, int cardW)
+        private void DrawTopStatusCard(int screenW)
         {
             bool isClosed = _measurement != null && _measurement.IsRoomClosed;
-            int topCardH = isClosed ? 230 : 175;
-            GUI.Box(new Rect(pad, pad, cardW, topCardH), GUIContent.none);
+            float cardW = Mathf.Min(screenW - 32f, 520f);
+            float cardX = (screenW - cardW) * 0.5f;
+            float cardH = isClosed ? 116f : 96f;
+            float cardY = 18f;
 
-            GUIStyle titleStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 23,
-                fontStyle = FontStyle.Bold,
-                normal = { textColor = new Color(0.95f, 0.78f, 0.12f) } // Safety Gold
-            };
+            DrawPanelBox(new Rect(cardX, cardY, cardW, cardH));
 
-            GUIStyle statusStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 15,
-                fontStyle = FontStyle.Bold,
-                normal = { textColor = new Color(0.85f, 0.92f, 1.0f) }
-            };
+            GUILayout.BeginArea(new Rect(cardX + 16, cardY + 10, cardW - 32, cardH - 18));
 
-            GUIStyle guideStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 17,
-                fontStyle = FontStyle.Bold,
-                wordWrap = true,
-                normal = { textColor = Color.white }
-            };
-
-            GUIStyle areaStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 25,
-                fontStyle = FontStyle.Bold,
-                normal = { textColor = new Color(0.2f, 1.0f, 0.5f) } // Green
-            };
-
-            GUILayout.BeginArea(new Rect(pad + 14, pad + 10, cardW - 28, topCardH - 18));
-
-            // Row 1: Header
+            // Row 1: Title + Live Status Pill
             GUILayout.BeginHorizontal();
-            GUILayout.Label("ROOM SCANNER (4 CORNERS)", titleStyle);
+            GUILayout.Label("AR ROOM SURVEY", _topTitleStyle);
             GUILayout.FlexibleSpace();
 
             bool tracking = _measurement != null && _measurement.IsTrackingStable;
-            string trackLabel = tracking ? "Tracking: GOOD" : "Tracking: SCANNING";
-            Color trackCol = tracking ? Color.green : Color.yellow;
-            GUILayout.Label(trackLabel, new GUIStyle(GUI.skin.label) { fontSize = 15, fontStyle = FontStyle.Bold, normal = { textColor = trackCol } });
+            string trackLabel = tracking ? "● TRACKING ACTIVE" : "◌ SCANNING FLOOR";
+            Color trackCol = tracking ? new Color(0.20f, 0.95f, 0.50f) : new Color(0.98f, 0.78f, 0.15f);
+            GUILayout.Label(trackLabel, new GUIStyle(GUI.skin.label) { fontSize = 13, fontStyle = FontStyle.Bold, normal = { textColor = trackCol } });
             GUILayout.EndHorizontal();
 
-            // Row 2: Live Info
-            string surfaceStr = (_measurement != null && _measurement.RaycastController != null)
-                ? _measurement.RaycastController.SurfaceTypeString
-                : "NONE";
-            int flags = _measurement != null ? _measurement.FlagCount : 0;
-
-            GUILayout.Label($"Surface: {surfaceStr}  |  Corners Measured: {flags} / 4", statusStyle);
             GUILayout.Space(2);
 
-            // Row 3: If closed, show Room Summary
+            // Row 2: Dynamic Guide Instruction or Room Summary
             if (isClosed)
             {
-                string statusMsg = _measurement.RectangleAnalysis.StatusMessage;
-                Color statusColor = _measurement.IsRectangular ? new Color(0.2f, 1.0f, 0.5f) : new Color(0.95f, 0.85f, 0.2f);
-                GUILayout.Label(statusMsg, new GUIStyle(GUI.skin.label) { fontSize = 16, fontStyle = FontStyle.Bold, normal = { textColor = statusColor } });
-
-                GUILayout.Label($"ROOM AREA: {_measurement.Area:F2} m²", areaStyle);
-                GUILayout.Label($"Length: {_measurement.Length:F2} m   |   Width: {_measurement.Width:F2} m", statusStyle);
+                GUILayout.Label($"ROOM AREA: {_measurement.Area:F2} m²  ({_measurement.Length:F2}m × {_measurement.Width:F2}m)", _areaResultStyle);
+                string rectMsg = _measurement.IsRectangular ? "✓ Standard Rectangular Boundary Verified" : "⚠️ Non-Standard Rectangular Shape";
+                Color rectCol = _measurement.IsRectangular ? new Color(0.25f, 0.95f, 0.55f) : new Color(0.95f, 0.82f, 0.20f);
+                GUILayout.Label(rectMsg, new GUIStyle(GUI.skin.label) { fontSize = 13, fontStyle = FontStyle.Normal, normal = { textColor = rectCol } });
             }
             else
             {
-                string instruction = _measurement != null ? _measurement.StatusMessage : "SCAN THE FLOOR";
-                GUILayout.Label(instruction, guideStyle);
+                int flags = _measurement != null ? _measurement.FlagCount : 0;
+                string instruction = flags switch
+                {
+                    0 => "Point reticle at first corner & tap Place Flag",
+                    1 => "Walk to 2nd corner along wall & tap Place Flag",
+                    2 => "Walk to 3rd corner & tap Place Flag",
+                    3 => "Walk to 4th corner & tap Place Flag",
+                    4 => "All 4 corners set! Tap Close Room below",
+                    _ => "Scan floor to begin survey"
+                };
+                GUILayout.Label(instruction, _instructionStyle);
+
+                // Row 3: Corner Progress Tracker (● ● ○ ○)
+                string p1 = flags >= 1 ? "●" : "○";
+                string p2 = flags >= 2 ? "●" : "○";
+                string p3 = flags >= 3 ? "●" : "○";
+                string p4 = flags >= 4 ? "●" : "○";
+
+                string surfaceStr = (_measurement != null && _measurement.RaycastController != null)
+                    ? _measurement.RaycastController.SurfaceTypeString
+                    : "DETECTING";
+
+                GUILayout.Label($"Corners:  {p1} {p2} {p3} {p4}  ({flags}/4)   |   Surface: {surfaceStr}", _subMetaStyle);
             }
 
             GUILayout.EndArea();
         }
 
-        private void DrawBottomActionDeck(int pad, int screenH, int cardW)
+        private void DrawBottomActionDeck(int screenW, int screenH)
         {
-            int btnH = 64;
-            int deckH = btnH * 2 + 16;
-            int deckY = screenH - deckH - pad;
+            float deckW = Mathf.Min(screenW - 32f, 500f);
+            float deckX = (screenW - deckW) * 0.5f;
 
-            GUILayout.BeginArea(new Rect(pad, deckY, cardW, deckH));
+            int btnH = 54;
+            int subBtnH = 42;
+            int spacing = 8;
+            int pad = 12;
 
-            Color origBg = GUI.backgroundColor;
-            GUIStyle mainBtnStyle = new GUIStyle(GUI.skin.button) { fontSize = 22, fontStyle = FontStyle.Bold };
+            int deckH = pad * 2 + btnH + spacing + subBtnH;
+            float deckY = screenH - deckH - 20f;
+
+            DrawPanelBox(new Rect(deckX, deckY, deckW, deckH));
+
+            GUILayout.BeginArea(new Rect(deckX + pad, deckY + pad, deckW - (pad * 2), deckH - (pad * 2)));
 
             bool isClosed = _measurement != null && _measurement.IsRoomClosed;
             int flags = _measurement != null ? _measurement.FlagCount : 0;
 
             // ==========================================================
-            // ROW 1: PRIMARY ACTION BUTTON
+            // ROW 1: PRIMARY ACTION BUTTON (PLACE FLAG / CLOSE / GENERATE)
             // ==========================================================
             if (isClosed)
             {
-                GUI.backgroundColor = new Color(0.18f, 0.95f, 0.42f); // Safety Green
-                if (GUILayout.Button($"✅ CONFIRM & START DRILL ({_measurement.Area:F2} m²)", mainBtnStyle, GUILayout.Height(btnH)))
+                GUI.backgroundColor = new Color(0.15f, 0.85f, 0.42f); // Emerald Safety Green
+                if (GUILayout.Button($"⛏️ GENERATE MINE ENVIRONMENT ({_measurement.Area:F2} m²)", _mainBtnStyle, GUILayout.Height(btnH)))
                 {
                     OnConfirmClicked();
                 }
             }
             else if (flags == 4)
             {
-                // EXACTLY 4 FLAGS: Prompt to CLOSE ROOM
-                GUI.backgroundColor = new Color(0.1f, 0.6f, 1.0f); // Blue
-                if (GUILayout.Button("📐 CLOSE ROOM (50% BLUE SHADE)", mainBtnStyle, GUILayout.Height(btnH)))
+                GUI.backgroundColor = new Color(0.12f, 0.60f, 1.0f); // Vibrant AR Blue
+                if (GUILayout.Button("📐 CLOSE ROOM & SURVEY AREA", _mainBtnStyle, GUILayout.Height(btnH)))
                 {
                     OnCloseRoomClicked();
                 }
             }
             else
             {
-                // Adding Flags 1, 2, 3, or 4
                 bool canAdd = _measurement != null && _measurement.CanAddFlag;
-                string addFlagText = canAdd ? $"🚩 PLACE CORNER {flags + 1} ({flags + 1}/4)" : "🔍 POINT AT FLOOR TO CALIBRATE";
-                GUI.backgroundColor = canAdd ? new Color(0.1f, 0.85f, 1.0f) : new Color(0.5f, 0.55f, 0.6f);
+                string addFlagText = canAdd 
+                    ? $"🚩 PLACE FLAG  ({flags + 1}/4)" 
+                    : "🔍 POINT AT FLOOR TO CALIBRATE";
+
+                GUI.backgroundColor = canAdd 
+                    ? new Color(0.08f, 0.68f, 0.95f) // High-visibility AR Cyan
+                    : new Color(0.38f, 0.44f, 0.52f); // Muted slate
 
                 GUI.enabled = canAdd;
-                if (GUILayout.Button(addFlagText, mainBtnStyle, GUILayout.Height(btnH)))
+                if (GUILayout.Button(addFlagText, _mainBtnStyle, GUILayout.Height(btnH)))
                 {
                     OnAddFlagClicked();
                 }
                 GUI.enabled = true;
             }
 
-            GUI.backgroundColor = origBg;
-            GUILayout.Space(8);
+            GUI.backgroundColor = Color.white;
+            GUILayout.Space(spacing);
 
             // ==========================================================
-            // ROW 2: SECONDARY CONTROLS (UNDO, RESET)
+            // ROW 2: CENTERED SECONDARY CONTROLS (UNDO, RESET)
             // ==========================================================
             GUILayout.BeginHorizontal();
 
-            GUIStyle subBtnStyle = new GUIStyle(GUI.skin.button) { fontSize = 17, fontStyle = FontStyle.Bold };
+            float halfW = (deckW - (pad * 2) - spacing) * 0.5f;
 
-            // 1. UNDO LAST FLAG
-            GUI.enabled = flags > 0;
-            if (GUILayout.Button("↩ UNDO LAST FLAG", subBtnStyle, GUILayout.Height(btnH - 12), GUILayout.Width(cardW * 0.48f)))
+            // 1. UNDO BUTTON
+            bool canUndo = flags > 0 && !isClosed;
+            GUI.enabled = canUndo;
+            GUI.backgroundColor = canUndo ? new Color(0.20f, 0.28f, 0.38f) : new Color(0.12f, 0.16f, 0.22f);
+            if (GUILayout.Button("↩ UNDO", _subBtnStyle, GUILayout.Height(subBtnH), GUILayout.Width(halfW)))
             {
                 OnUndoClicked();
             }
             GUI.enabled = true;
 
-            GUILayout.FlexibleSpace();
+            GUILayout.Space(spacing);
 
-            // 2. RESET
-            if (GUILayout.Button("🔄 RESET", subBtnStyle, GUILayout.Height(btnH - 12), GUILayout.Width(cardW * 0.48f)))
+            // 2. RESET BUTTON
+            GUI.backgroundColor = new Color(0.28f, 0.18f, 0.22f); // Subtle red-tinted dark button for reset
+            if (GUILayout.Button("🔄 RESET", _subBtnStyle, GUILayout.Height(subBtnH), GUILayout.Width(halfW)))
             {
                 OnResetClicked();
             }
+
+            GUI.backgroundColor = Color.white;
 
             GUILayout.EndHorizontal();
 
             GUILayout.EndArea();
         }
 
+        private void DrawConfirmedOverlay(int screenW, int screenH)
+        {
+            // If training is already underway, suppress measurement overlay so trainee has an unobstructed screen
+            if (ARMiningSimulator.Core.SimulationGameLoop.Instance != null &&
+                ARMiningSimulator.Core.SimulationGameLoop.Instance.CurrentStage >= ARMiningSimulator.Core.SimulationStage.FireIgnited)
+            {
+                return;
+            }
+
+            if (ARMiningSimulator.Fire.FireManager.Instance != null && ARMiningSimulator.Fire.FireManager.Instance.HasActiveFires)
+            {
+                return;
+            }
+
+            var envGen = _measurement != null
+                ? _measurement.GetComponent<ARMiningSimulator.Environment.MiningEnvironmentGenerator>() ?? FindFirstObjectByType<ARMiningSimulator.Environment.MiningEnvironmentGenerator>()
+                : null;
+
+            bool isEquipmentPending = envGen != null && !envGen.IsEquipmentSpawned && envGen.IsEnvironmentReady;
+            int barW = Mathf.Min(screenW - 32, isEquipmentPending ? 640 : 540);
+            int barH = 52;
+            int barX = (screenW - barW) / 2;
+            int barY = 18;
+
+            DrawPanelBox(new Rect(barX, barY, barW, barH));
+
+            GUILayout.BeginArea(new Rect(barX + 16, barY + 8, barW - 32, barH - 16));
+            GUILayout.BeginHorizontal();
+
+            float area = _measurement != null ? _measurement.Area : 0f;
+
+            if (isEquipmentPending)
+            {
+                GUILayout.Label($"⛏️ MINE BUILT  •  EQUIPMENT IN {envGen.RemainingEquipmentDelay:F1}s", _pendingStyle);
+                GUILayout.FlexibleSpace();
+
+                GUI.backgroundColor = new Color(0.15f, 0.65f, 0.95f);
+                if (GUILayout.Button("⚡ DEPLOY NOW", _overlayBtnStyle, GUILayout.Width(130), GUILayout.Height(36)))
+                {
+                    envGen.DeployEquipmentNow();
+                }
+                GUI.backgroundColor = Color.white;
+                GUILayout.Space(8);
+            }
+            else
+            {
+                int machines = envGen != null && envGen.Spawner != null ? envGen.Spawner.SpawnedMachines.Count : 6;
+                int elec = envGen != null && envGen.Spawner != null ? envGen.Spawner.SpawnedElectrical.Count : 11;
+                string statusText = envGen != null && envGen.IsEquipmentSpawned
+                    ? $"⛏️ MINE & EQUIPMENT ACTIVE ({machines}M | {elec}E)"
+                    : $"⛏️ UNDERGROUND MINE ({area:F2} m²)";
+                GUILayout.Label(statusText, _confirmedActiveStyle);
+                GUILayout.FlexibleSpace();
+            }
+
+            GUI.backgroundColor = new Color(0.24f, 0.30f, 0.40f);
+            if (GUILayout.Button("🔄 RE-SCAN", _overlayBtnStyle, GUILayout.Width(110), GUILayout.Height(36)))
+            {
+                OnResetClicked();
+            }
+            GUI.backgroundColor = Color.white;
+
+            GUILayout.EndHorizontal();
+            GUILayout.EndArea();
+
+            // If MiningEnvironmentUI is NOT present in the scene, draw the center-bottom Start Training Deck here
+            var miningUI = FindFirstObjectByType<MiningEnvironmentUI>();
+            if (miningUI == null && envGen != null && envGen.IsEquipmentSpawned)
+            {
+                int deckW = Mathf.Min(screenW - 40, 520);
+                int deckH = 105;
+                int deckX = (screenW - deckW) / 2;
+                int deckY = screenH - deckH - 24;
+
+                DrawPanelBox(new Rect(deckX, deckY, deckW, deckH));
+
+                GUILayout.BeginArea(new Rect(deckX + 12, deckY + 10, deckW - 24, deckH - 20));
+
+                GUI.backgroundColor = new Color(0.12f, 0.85f, 0.42f); // Emerald Safety Green
+                if (GUILayout.Button("🚨 START TRAINING DRILL", _mainBtnStyle, GUILayout.Height(50)))
+                {
+                    StartTrainingFromMeasurementUI();
+                }
+
+                GUILayout.Space(6);
+
+                GUILayout.BeginHorizontal();
+                GUI.backgroundColor = new Color(0.20f, 0.28f, 0.38f);
+                if (GUILayout.Button("🔀 RE-ROLL LAYOUT", _subBtnStyle, GUILayout.Height(30)))
+                {
+                    if (envGen != null) envGen.Regenerate();
+                }
+
+                GUILayout.Space(8);
+
+                GUI.backgroundColor = new Color(0.28f, 0.18f, 0.22f);
+                if (GUILayout.Button("🔄 RE-SCAN ROOM", _subBtnStyle, GUILayout.Height(30)))
+                {
+                    OnResetClicked();
+                }
+                GUILayout.EndHorizontal();
+
+                GUI.backgroundColor = Color.white;
+                GUILayout.EndArea();
+            }
+        }
+
+        private void StartTrainingFromMeasurementUI()
+        {
+            if (ARMiningSimulator.Core.SimulationGameLoop.Instance != null)
+            {
+                ARMiningSimulator.Core.SimulationGameLoop.Instance.StartTrainingDrill();
+            }
+            else
+            {
+                var envGen = _measurement != null
+                    ? _measurement.GetComponent<ARMiningSimulator.Environment.MiningEnvironmentGenerator>() ?? FindAnyObjectByType<ARMiningSimulator.Environment.MiningEnvironmentGenerator>()
+                    : FindAnyObjectByType<ARMiningSimulator.Environment.MiningEnvironmentGenerator>();
+                if (envGen != null && !envGen.IsEquipmentSpawned && envGen.IsEnvironmentReady)
+                {
+                    envGen.DeployEquipmentNow();
+                }
+
+                var fireManager = FindAnyObjectByType<ARMiningSimulator.Fire.FireManager>();
+                if (fireManager != null)
+                {
+                    fireManager.StartScenarioFires();
+                }
+
+                if (ARMiningSimulator.Player.TraineeDetection.Instance != null)
+                {
+                    ARMiningSimulator.Player.TraineeDetection.Instance.StartStopwatch();
+                }
+
+                var hud = FindAnyObjectByType<TraineeStatusHUD>();
+                if (hud != null)
+                {
+                    hud.ResetFireVisibility();
+                }
+            }
+
+            Debug.Log("[RoomMeasurementUI] 🚨 START TRAINING DRILL TRIGGERED!");
+        }
+
         /// <summary>
         /// Real-time Development/Debug Panel (Requirement 23).
-        /// Displays AR Tracking, Floor Calibration, Raycast valid, Surface type, Point stability, Depth status, Hit Position, and Flag count.
+        /// Hidden by default for a clean simulation UI. Toggleable via subtle icon in top right.
         /// </summary>
         private void DrawDebugPanel(int screenW, int screenH)
         {
-            // Toggle Button in top-right corner
-            int toggleW = 105;
-            int toggleH = 34;
-            int toggleX = screenW - toggleW - 20;
-            int toggleY = 20;
+            // Subtle, small toggle button in top-right corner
+            int toggleW = 76;
+            int toggleH = 28;
+            int toggleX = screenW - toggleW - 16;
+            int toggleY = 18;
 
-            if (GUI.Button(new Rect(toggleX, toggleY, toggleW, toggleH), _showDebugPanel ? "🐛 HIDE" : "🐛 DEBUG"))
+            GUI.backgroundColor = new Color(0.15f, 0.20f, 0.28f, 0.80f);
+            if (GUI.Button(new Rect(toggleX, toggleY, toggleW, toggleH), _showDebugPanel ? "✕ DBG" : "⚙ DBG", _dbgToggleBtnStyle))
             {
                 _showDebugPanel = !_showDebugPanel;
             }
+            GUI.backgroundColor = Color.white;
 
             if (!_showDebugPanel) return;
 
-            int panelW = 290;
-            int panelH = 240;
-            int panelX = screenW - panelW - 20;
+            int panelW = 280;
+            int panelH = 220;
+            int panelX = screenW - panelW - 16;
             int panelY = toggleY + toggleH + 6;
 
-            GUI.Box(new Rect(panelX, panelY, panelW, panelH), GUIContent.none);
+            DrawPanelBox(new Rect(panelX, panelY, panelW, panelH));
 
             GUIStyle dbgHeader = new GUIStyle(GUI.skin.label)
             {
                 fontSize = 13,
                 fontStyle = FontStyle.Bold,
-                normal = { textColor = Color.yellow }
+                normal = { textColor = new Color(1.0f, 0.82f, 0.20f) }
             };
 
             GUIStyle dbgLabel = new GUIStyle(GUI.skin.label)
             {
-                fontSize = 12,
-                normal = { textColor = Color.white }
+                fontSize = 11,
+                normal = { textColor = new Color(0.85f, 0.90f, 0.95f) }
             };
 
-            GUILayout.BeginArea(new Rect(panelX + 10, panelY + 6, panelW - 20, panelH - 12));
+            GUILayout.BeginArea(new Rect(panelX + 12, panelY + 8, panelW - 24, panelH - 16));
 
             GUILayout.Label("── AR DEBUG PANEL ──", dbgHeader);
 

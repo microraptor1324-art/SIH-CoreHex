@@ -9,10 +9,10 @@ namespace ARMiningSimulator.Decisions
 {
     /// <summary>
     /// Coordinates the interactive decision tests for underground mining fire safety:
-    /// - Stage 1: Immediate Action (Alarm & Surface Notification)
-    /// - Stage 2: Ventilation Management (Airflow Direction & Smoke Extraction)
-    /// Tracks scores, provides feedback based on MSHA/ISO mining safety standards,
-    /// and applies physical simulation consequences (alarm beacon, spread speed, smoke rate).
+    /// - Decision 1: Immediate Action (Raise Alarm)
+    /// - Decision 2: Ventilation Management (Direct Airflow Outbye)
+    /// After Decision 2 is completed, evacuation begins towards the Safe Area,
+    /// where Decision 3 (Fire Size Assessment & Tactical Action) takes place.
     /// </summary>
     public class DecisionManager : MonoBehaviour
     {
@@ -74,70 +74,90 @@ namespace ARMiningSimulator.Decisions
             // Stage 1: Immediate Action & Alarm
             _questionStage1 = new DecisionQuestion(
                 DecisionStage.Stage1_Alarm,
-                "EMERGENCY RESPONSE: IMMEDIATE ACTION",
-                "You have confirmed a fire in the active mine shaft. What is your MANDATORY FIRST ACTION?",
+                "DECISION 1: FIRE SPOTTED",
+                "You have confirmed a fire in the mine. What is your MANDATORY FIRST ACTION?",
                 20f
             );
             _questionStage1.options.Add(new DecisionOption(
-                "🚨 Sound Mine Evacuation Alarm & Alert Surface Control",
+                "raise alarm",
                 true,
                 100,
-                "CORRECT! Mining Safety Standard Rule #1: Always activate the mine-wide evacuation alarm and notify surface control immediately to alert all underground personnel."
+                "CORRECT! Mining Safety Standard Rule #1: Always raise the evacuation alarm immediately to alert all underground personnel and surface control."
             ));
             _questionStage1.options.Add(new DecisionOption(
-                "🧯 Attempt to fight the fire alone without notifying anyone",
-                false,
-                -50,
-                "CRITICAL VIOLATION! Never attempt to extinguish an underground fire alone before raising the alarm. If you are overcome, nobody knows you or your crew need rescue.",
-                1.35f,
-                1.2f
-            ));
-            _questionStage1.options.Add(new DecisionOption(
-                "🏃 Evacuate immediately without sounding the alarm",
-                false,
-                -40,
-                "SERIOUS ERROR! Leaving without triggering the alarm leaves other underground miners unaware of toxic smoke filling the ventilation network.",
-                1.1f,
-                1.0f
-            ));
-            _questionStage1.options.Add(new DecisionOption(
-                "⚡ Shut down equipment power isolator, then sound alarm",
+                "fight the fire",
                 false,
                 30,
-                "PARTIAL: Isolating electrical energy is important, but raising the mine-wide alarm must always take first priority before attempting local switches."
+                "INCORRECT / HAZARDOUS: Never attempt to fight an underground fire alone before raising the alarm. If you are overcome by heat or smoke, nobody knows you or your crew need rescue."
+            ));
+            _questionStage1.options.Add(new DecisionOption(
+                "shut down the power",
+                false,
+                50,
+                "PARTIAL: Isolating equipment power is important, but raising the mine-wide alarm must always be your mandatory first action before attempting local switches."
             ));
 
-            // Stage 2: Mine Ventilation Management
+            // Stage 2: Mine Ventilation & Smoke Direction
             _questionStage2 = new DecisionQuestion(
                 DecisionStage.Stage2_Ventilation,
-                "VENTILATION CONTROL: AIRFLOW & SMOKE DIRECTION",
-                "Dense toxic smoke is rising. How should underground ventilation be configured?",
+                "DECISION 2: MINE VENTILATION & SMOKE DIRECTION",
+                "Toxic combustion gases begin filling the tunnel drift. What is your required ventilation action?",
                 20f
             );
             _questionStage2.options.Add(new DecisionOption(
-                "💨 Direct airflow outbye: Exhaust smoke away from escape routes",
+                "Direct airflow outbye",
                 true,
                 100,
-                "CORRECT! Proper mine ventilation keeps designated evacuation walkways in fresh air, preventing carbon monoxide poisoning and preserving visibility to the exit.",
+                "CORRECT (+100 PTS)! Mining Safety Standard (MSHA/ISO): Direct airflow outbye to exhaust toxic smoke and combustion gases away from escape routes, keeping designated evacuation walkways clear of toxic fumes.",
                 0.85f,
                 0.5f
             ));
             _questionStage2.options.Add(new DecisionOption(
-                "🛑 Shut down all main ventilation fans immediately",
+                "Reverse airflow into working face",
                 false,
-                -60,
-                "CRITICAL HAZARD! Halting airflow causes lethal carbon monoxide and heat to rapidly pool in the immediate chamber, drastically accelerating asphyxiation.",
-                1.1f,
-                2.2f
-            ));
-            _questionStage2.options.Add(new DecisionOption(
-                "🔄 Reverse airflow into working face without authorization",
-                false,
-                -50,
-                "DANGEROUS! Reversing airflow can blow smoke directly across fleeing personnel and introduce fresh oxygen that escalates the fire into an explosion.",
+                -30,
+                "DANGEROUS PROTOCOL VIOLATION (-30 PTS)! Reversing airflow forces toxic combustion gases across personnel fleeing the working face and feeds fresh air into the fire seat.",
                 1.5f,
                 1.4f
             ));
+            _questionStage2.options.Add(new DecisionOption(
+                "Shut down all main ventilation fans immediately",
+                false,
+                50,
+                "PARTIAL (+50 PTS): Halting main fans stops fresh oxygen from feeding the fire seat, but causes lethal carbon monoxide (CO) and smoke to rapidly stagnate in the drift. Directing airflow outbye is the superior safety standard.",
+                1.1f,
+                1.8f
+            ));
+        }
+
+        private string _lastOrderStage1 = "";
+        private string _lastFirstOptionStage1 = "";
+        private string _lastOrderStage2 = "";
+        private string _lastFirstOptionStage2 = "";
+
+        private void ShuffleOptions(List<DecisionOption> options, ref string lastOrder, ref string lastFirstOption)
+        {
+            if (options == null || options.Count <= 1) return;
+
+            for (int attempt = 0; attempt < 30; attempt++)
+            {
+                for (int i = options.Count - 1; i > 0; i--)
+                {
+                    int rand = UnityEngine.Random.Range(0, i + 1);
+                    var temp = options[i];
+                    options[i] = options[rand];
+                    options[rand] = temp;
+                }
+
+                string currentOrder = string.Join("|", options.ConvertAll(o => o.text));
+                if (currentOrder != lastOrder && options[0].text != lastFirstOption)
+                    break;
+                if (attempt > 20 && currentOrder != lastOrder)
+                    break;
+            }
+
+            lastOrder = string.Join("|", options.ConvertAll(o => o.text));
+            lastFirstOption = options[0].text;
         }
 
         private void HandleFireDetected(FireHazard hazard, float reactionTime)
@@ -150,12 +170,13 @@ namespace ARMiningSimulator.Decisions
         {
             _currentStage = DecisionStage.Stage1_Alarm;
             _currentQuestion = _questionStage1;
+            ShuffleOptions(_questionStage1.options, ref _lastOrderStage1, ref _lastFirstOptionStage1);
             _stageTimer = 0f;
             _isWaitingForSelection = true;
             _isShowingFeedback = false;
             _lastSelectedOption = null;
 
-            Debug.Log("[DecisionManager] 📋 Starting Decision Stage 1: Immediate Action.");
+            Debug.Log($"[DecisionManager] 📋 Starting Decision Stage 1: Immediate Action (Raise Alarm).");
             OnQuestionPresented?.Invoke(_currentQuestion);
         }
 
@@ -163,12 +184,13 @@ namespace ARMiningSimulator.Decisions
         {
             _currentStage = DecisionStage.Stage2_Ventilation;
             _currentQuestion = _questionStage2;
+            ShuffleOptions(_questionStage2.options, ref _lastOrderStage2, ref _lastFirstOptionStage2);
             _stageTimer = 0f;
             _isWaitingForSelection = true;
             _isShowingFeedback = false;
             _lastSelectedOption = null;
 
-            Debug.Log("[DecisionManager] 📋 Starting Decision Stage 2: Ventilation Management.");
+            Debug.Log($"[DecisionManager] 📋 Starting Decision Stage 2: Ventilation Management (Direct Airflow Outbye).");
             OnQuestionPresented?.Invoke(_currentQuestion);
         }
 
@@ -198,7 +220,6 @@ namespace ARMiningSimulator.Decisions
 
             _totalScore += earnedScore;
 
-            // Record history
             var record = new DecisionRecord
             {
                 stage = _currentStage,
@@ -221,7 +242,6 @@ namespace ARMiningSimulator.Decisions
         {
             if (stage == DecisionStage.Stage1_Alarm)
             {
-                // If alarm option selected, trigger emergency strobe
                 if (option.isCorrect || option.scoreModifier > 0)
                 {
                     if (EmergencyAlarmBeacon.Instance != null)
@@ -231,7 +251,6 @@ namespace ARMiningSimulator.Decisions
                 }
             }
 
-            // Modify spread rate and smoke damage
             if (FireSpreadSystem.Instance != null && option.spreadRateMultiplier != 1.0f)
             {
                 FireSpreadSystem.Instance.TimeMultiplier = option.spreadRateMultiplier;
@@ -244,12 +263,36 @@ namespace ARMiningSimulator.Decisions
 
             if (_currentStage == DecisionStage.Stage1_Alarm)
             {
-                StartStage2();
+                if (_lastSelectedOption != null && _lastSelectedOption.isCorrect)
+                {
+                    Debug.Log("[DecisionManager] 📋 Decision 1 Correct! Transitioning to Decision 2: Mine Ventilation & Smoke Direction.");
+                    StartStage2();
+                }
+                else
+                {
+                    // Re-open question modal so trainee can select the mandatory life-saving action
+                    ShuffleOptions(_questionStage1.options, ref _lastOrderStage1, ref _lastFirstOptionStage1);
+                    _isWaitingForSelection = true;
+                }
             }
             else if (_currentStage == DecisionStage.Stage2_Ventilation)
             {
+                if (_lastSelectedOption != null && _lastSelectedOption.isCorrect)
+                {
+                    _currentStage = DecisionStage.Completed;
+                    Debug.Log("[DecisionManager] 🏁 Decision 2 Correct! All decisions completed. Activating directions to Safety Area.");
+                    OnDecisionsCompleted?.Invoke();
+                }
+                else
+                {
+                    // Re-open question modal so trainee can select the correct ventilation protocol (reshuffled)
+                    ShuffleOptions(_questionStage2.options, ref _lastOrderStage2, ref _lastFirstOptionStage2);
+                    _isWaitingForSelection = true;
+                }
+            }
+            else
+            {
                 _currentStage = DecisionStage.Completed;
-                Debug.Log("[DecisionManager] 🏁 Decision Stages 1 & 2 completed! Ready for evacuation.");
                 OnDecisionsCompleted?.Invoke();
             }
         }
@@ -264,6 +307,10 @@ namespace ARMiningSimulator.Decisions
             _stageTimer = 0f;
             _totalScore = 0;
             _history.Clear();
+            _lastOrderStage1 = "";
+            _lastFirstOptionStage1 = "";
+            _lastOrderStage2 = "";
+            _lastFirstOptionStage2 = "";
 
             if (EmergencyAlarmBeacon.Instance != null)
             {
