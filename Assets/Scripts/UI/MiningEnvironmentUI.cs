@@ -93,6 +93,19 @@ namespace ARMiningSimulator.UI
 
         private void OnGUI()
         {
+            TacticalUITheme.BeginScaledGUI();
+            try
+            {
+            DrawOnGUIContent();
+            }
+            finally
+            {
+                TacticalUITheme.EndScaledGUI();
+            }
+        }
+
+        private void DrawOnGUIContent()
+        {
             // Sync with global simulation game loop or active fire manager
             if (ARMiningSimulator.Core.SimulationGameLoop.Instance != null &&
                 ARMiningSimulator.Core.SimulationGameLoop.Instance.CurrentStage >= ARMiningSimulator.Core.SimulationStage.FireIgnited)
@@ -109,12 +122,12 @@ namespace ARMiningSimulator.UI
             if (_trainingBannerTimer > 0f)
             {
                 _trainingBannerTimer -= Time.deltaTime;
-                int toastW = Mathf.Min(Screen.width - 32, 620);
+                int toastW = Mathf.RoundToInt(Mathf.Min(TacticalUITheme.VW - 32, 620));
                 int toastH = 48;
-                int toastX = (Screen.width - toastW) / 2;
+                int toastX = Mathf.RoundToInt((TacticalUITheme.VW - toastW) / 2);
                 int toastY = 18;
 
-                GUI.Box(new Rect(toastX, toastY, toastW, toastH), GUIContent.none);
+                TacticalUITheme.DrawFortniteCard(new Rect(toastX, toastY, toastW, toastH), TacticalUITheme.FortniteAmber, TacticalUITheme.FortniteNavyDark);
                 GUIStyle alertStyle = new GUIStyle(GUI.skin.label)
                 {
                     fontSize = 15,
@@ -132,92 +145,50 @@ namespace ARMiningSimulator.UI
             // Only draw OnGUI if uGUI is not bound
             if (_infoText != null && _equipmentText != null) return;
 
+            // Don't draw the mine-generation cards while still in the room-scanning phase —
+            // this was overlapping directly on top of RoomMeasurementUI's status card.
+            if (ARMiningSimulator.Core.SimulationGameLoop.Instance != null &&
+                ARMiningSimulator.Core.SimulationGameLoop.Instance.CurrentStage != ARMiningSimulator.Core.SimulationStage.MineActive)
+            {
+                return;
+            }
+
             int pad = 20;
-            int screenW = Screen.width;
-            int screenH = Screen.height;
+            int screenW = Mathf.RoundToInt(TacticalUITheme.VW);
+            int screenH = Mathf.RoundToInt(TacticalUITheme.VH);
             int cardW = Mathf.Min(screenW - pad * 2, 580);
             int cardX = (screenW - cardW) / 2;
 
-            // 2. TOP STATS CARD
-            int topH = 195;
-            GUI.Box(new Rect(cardX, pad, cardW, topH), GUIContent.none);
-
-            GUIStyle headerStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 19,
-                fontStyle = FontStyle.Bold,
-                normal = { textColor = new Color(0.98f, 0.75f, 0.1f) } // Mining Gold
-            };
-
-            GUIStyle labelStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 16,
-                fontStyle = FontStyle.Bold,
-                normal = { textColor = Color.white }
-            };
-
-            GUIStyle subStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 14,
-                normal = { textColor = new Color(0.85f, 0.9f, 0.95f) }
-            };
-
-            GUIStyle readyStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 14,
-                fontStyle = FontStyle.Bold,
-                normal = { textColor = new Color(0.15f, 0.95f, 0.45f) } // Bright Green
-            };
-
-            GUILayout.BeginArea(new Rect(cardX + 16, pad + 12, cardW - 32, topH - 24));
-            GUILayout.Label("⛏️ UNDERGROUND MINING SECTION", headerStyle);
-            GUILayout.Space(2);
-
-            float len = _generator != null ? _generator.ActiveLength : 0f;
-            float wid = _generator != null ? _generator.ActiveWidth : 0f;
-            float area = _generator != null ? _generator.ActiveArea : 0f;
-
-            GUILayout.Label($"Room Drift: {len:F2} m x {wid:F2} m ({area:F2} m²)", labelStyle);
-
-            if (_generator != null && !_generator.IsEquipmentSpawned)
-            {
-                GUILayout.Label($"Equipment: Deploying in {_generator.RemainingEquipmentDelay:F1}s ⚙️", subStyle);
-            }
-            else
-            {
-                int machines = _generator != null && _generator.Spawner != null ? _generator.Spawner.SpawnedMachines.Count : 6;
-                int elec = _generator != null && _generator.Spawner != null ? _generator.Spawner.SpawnedElectrical.Count : 11;
-                GUILayout.Label($"Equipment: {machines} Heavy Machines • {elec} Electrical Substation Units", subStyle);
-                GUILayout.Label("Status: All equipment zoned & ready for training drill ✅", readyStyle);
-            }
-
-            // Emergency exit distance
-            if (_generator != null && _arCamera != null)
-            {
-                float exitDist = Vector3.Distance(_arCamera.transform.position, _generator.EmergencyExitPosition);
-                GUILayout.Label($"Emergency Exit Corridor: {exitDist:F2} m away 🚪", subStyle);
-            }
-
-            int seed = _generator != null && _generator.Spawner != null ? _generator.Spawner.ActiveSeed : 0;
-            GUILayout.Label($"Layout Seed: #{seed}", subStyle);
-
-            GUILayout.EndArea();
-
             // 3. BOTTOM ACTIONS (Centered Action Deck)
             bool isReady = _generator != null && _generator.IsEquipmentSpawned;
-            int deckH = isReady ? 115 : 62;
-            int bottomY = screenH - deckH - pad - 6;
+            int deckH = isReady ? 122 : 70;
+            int bottomY = screenH - deckH - pad - 10;
 
-            GUI.Box(new Rect(cardX, bottomY, cardW, deckH), GUIContent.none);
-            GUILayout.BeginArea(new Rect(cardX + 12, bottomY + 8, cardW - 24, deckH - 16));
+            TacticalUITheme.DrawFortniteCard(new Rect(cardX, bottomY, cardW, deckH), TacticalUITheme.FortniteBlue, TacticalUITheme.FortniteNavyDark);
 
-            Color orig = GUI.backgroundColor;
+            float dInnerX = cardX + 14;
+            float dInnerW = cardW - 28;
+            float dY = bottomY + 14;
+
+            GUIStyle mainBtnStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 17,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white }
+            };
+            GUIStyle subBtnStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white }
+            };
 
             if (!isReady)
             {
                 // Staged deployment skip button
-                GUI.backgroundColor = new Color(0.15f, 0.65f, 0.95f);
-                if (GUILayout.Button("⚡ DEPLOY ALL EQUIPMENT NOW", GUILayout.Height(46)))
+                if (TacticalUITheme.DrawFortniteButton(new Rect(dInnerX, dY, dInnerW, 46), "⚡ DEPLOY ALL EQUIPMENT NOW", TacticalUITheme.FortniteBlue, mainBtnStyle))
                 {
                     if (_generator != null) _generator.DeployEquipmentNow();
                 }
@@ -225,32 +196,21 @@ namespace ARMiningSimulator.UI
             else
             {
                 // ROW 1: PRIMARY "START TRAINING" BUTTON
-                GUI.backgroundColor = new Color(0.12f, 0.85f, 0.42f); // Emerald Safety Green
-                GUIStyle startBtnStyle = new GUIStyle(GUI.skin.button)
-                {
-                    fontSize = 17,
-                    fontStyle = FontStyle.Bold
-                };
-                if (GUILayout.Button("🚨 START TRAINING DRILL", startBtnStyle, GUILayout.Height(54)))
+                if (TacticalUITheme.DrawFortniteButton(new Rect(dInnerX, dY, dInnerW, 56), "🚨 START TRAINING DRILL", TacticalUITheme.FortniteGreen, mainBtnStyle))
                 {
                     StartTraining();
                 }
 
-                GUILayout.Space(6);
+                dY += 56 + 10;
+                float halfW = (dInnerW - 10) * 0.5f;
 
                 // ROW 2: SECONDARY RE-ROLL & RE-SCAN CONTROLS
-                GUILayout.BeginHorizontal();
-
-                GUI.backgroundColor = new Color(0.20f, 0.28f, 0.38f);
-                if (GUILayout.Button("🔀 Re-Roll Layout", GUILayout.Height(34)))
+                if (TacticalUITheme.DrawFortniteButton(new Rect(dInnerX, dY, halfW, 36), "🔀 Re-Roll Layout", TacticalUITheme.FortniteNavyLight, subBtnStyle))
                 {
                     OnRegenerateClicked();
                 }
 
-                GUILayout.Space(8);
-
-                GUI.backgroundColor = new Color(0.28f, 0.18f, 0.22f);
-                if (GUILayout.Button("🔄 Re-Scan Room", GUILayout.Height(34)))
+                if (TacticalUITheme.DrawFortniteButton(new Rect(dInnerX + halfW + 10, dY, halfW, 36), "🔄 Re-Scan Room", TacticalUITheme.FortniteRed, subBtnStyle))
                 {
                     var measurement = FindFirstObjectByType<ARMiningSimulator.AR.ARRoomMeasurement>();
                     if (measurement != null)
@@ -262,12 +222,7 @@ namespace ARMiningSimulator.UI
                         _generator.ClearEnvironment();
                     }
                 }
-
-                GUILayout.EndHorizontal();
             }
-
-            GUI.backgroundColor = orig;
-            GUILayout.EndArea();
         }
     }
 }

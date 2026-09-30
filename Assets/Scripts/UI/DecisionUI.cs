@@ -20,6 +20,7 @@ namespace ARMiningSimulator.UI
         private GUIStyle _optionBtnStyle;
         private GUIStyle _feedbackStyle;
         private GUIStyle _actionBtnStyle;
+        private Vector2 _optionsScrollPos;
 
         private void OnGUI()
         {
@@ -27,13 +28,21 @@ namespace ARMiningSimulator.UI
 
             InitStyles();
 
-            if (DecisionManager.Instance.IsWaitingForSelection)
+            TacticalUITheme.BeginScaledGUI();
+            try
             {
-                DrawQuestionModal();
+                if (DecisionManager.Instance.IsWaitingForSelection)
+                {
+                    DrawQuestionModal();
+                }
+                else if (DecisionManager.Instance.IsShowingFeedback)
+                {
+                    DrawFeedbackModal();
+                }
             }
-            else if (DecisionManager.Instance.IsShowingFeedback)
+            finally
             {
-                DrawFeedbackModal();
+                TacticalUITheme.EndScaledGUI();
             }
         }
 
@@ -46,6 +55,7 @@ namespace ARMiningSimulator.UI
                     fontSize = 18,
                     fontStyle = FontStyle.Bold,
                     alignment = TextAnchor.MiddleCenter,
+                    wordWrap = true,
                     normal = { textColor = TacticalUITheme.FortniteGold }
                 };
             }
@@ -57,6 +67,7 @@ namespace ARMiningSimulator.UI
                     fontSize = 12,
                     fontStyle = FontStyle.Bold,
                     alignment = TextAnchor.MiddleCenter,
+                    wordWrap = true,
                     normal = { textColor = new Color(0.80f, 0.90f, 1.0f) }
                 };
             }
@@ -102,9 +113,10 @@ namespace ARMiningSimulator.UI
             {
                 _actionBtnStyle = new GUIStyle(GUI.skin.button)
                 {
-                    fontSize = 16,
+                    fontSize = 15,
                     fontStyle = FontStyle.Bold,
                     alignment = TextAnchor.MiddleCenter,
+                    wordWrap = true,
                     normal = { textColor = Color.white }
                 };
             }
@@ -116,69 +128,98 @@ namespace ARMiningSimulator.UI
             if (q == null) return;
 
             // Fullscreen dark backdrop scrim
-            TacticalUITheme.DrawRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.09f, 0.90f));
+            TacticalUITheme.DrawRect(new Rect(0, 0, TacticalUITheme.VW, TacticalUITheme.VH), new Color(0.04f, 0.05f, 0.09f, 0.90f));
 
-            float modalWidth = Mathf.Min(580f, Screen.width - 32f);
-            float modalHeight = 450f;
-            float mx = (Screen.width - modalWidth) * 0.5f;
-            float my = (Screen.height - modalHeight) * 0.5f;
+            float modalWidth = Mathf.Min(580f, TacticalUITheme.VW - 32f);
+            float innerW = modalWidth - 50f;
+            float chromeInnerW = modalWidth - 40f;
+
+            const float questionToOptions = 26f;
+            const float bottomPad = 16f;
+            const float optGap = 12f;
+            const float titleTopPad = 16f;
+            const float titleToQuestion = 16f;
+
+            string bannerTag = !string.IsNullOrEmpty(q.title) ? q.title : "TACTICAL DECISION PROTOCOL";
+
+            // Title can wrap to 2 lines on narrow screens / long titles ("DECISION 2: MINE
+            // VENTILATION & SMOKE DIRECTION") — measure it instead of assuming one line, so the
+            // question box below is never pushed under it.
+            float titleH = Mathf.Max(TacticalUITheme.CalcTextHeight(_headerStyle, bannerTag, chromeInnerW), 26f);
+            float chromeH = titleTopPad + titleH + titleToQuestion;
+
+            // Question box sized to its actual text — never a guessed constant.
+            float questionH = Mathf.Max(TacticalUITheme.CalcTextHeight(_questionStyle, q.questionText, innerW - 24f) + 16f, 44f);
+
+            // Each option row sized to its actual (possibly wrapped) text, via the button's own padding.
+            int optCount = q.options.Count;
+            float[] optHeights = new float[optCount];
+            float optListH = 0f;
+            for (int i = 0; i < optCount; i++)
+            {
+                string labelText = $"[{i + 1}] {q.options[i].text.ToUpper()}";
+                float textH = TacticalUITheme.CalcTextHeight(_optionBtnStyle, labelText, innerW - _optionBtnStyle.padding.horizontal);
+                optHeights[i] = Mathf.Max(textH + _optionBtnStyle.padding.vertical, 56f);
+                optListH += optHeights[i];
+                if (i > 0) optListH += optGap;
+            }
+
+            float naturalH = chromeH + questionH + questionToOptions + optListH + bottomPad;
+            float maxModalH = TacticalUITheme.VH - 32f;
+            float modalHeight = Mathf.Min(naturalH, maxModalH);
+            bool needsScroll = naturalH > maxModalH;
+            float mx = (TacticalUITheme.VW - modalWidth) * 0.5f;
+            float my = (TacticalUITheme.VH - modalHeight) * 0.5f;
             Rect modalRect = new Rect(mx, my, modalWidth, modalHeight);
 
-            // Fortnite Card with slanted ribbon
-            string bannerTag = !string.IsNullOrEmpty(q.title) ? q.title : "TACTICAL DECISION PROTOCOL";
-            TacticalUITheme.DrawFortniteCard(modalRect, TacticalUITheme.FortnitePurple, TacticalUITheme.FortniteNavyDark, $"/// {bannerTag} ///", TacticalUITheme.FortnitePurple);
+            // Card with no ribbon tag — kept plain per request.
+            TacticalUITheme.DrawFortniteCard(modalRect, TacticalUITheme.FortnitePurple, TacticalUITheme.FortniteNavyDark);
 
-            // Title
-            GUI.Label(new Rect(mx + 20, my + 16, modalWidth - 40, 26), bannerTag, _headerStyle);
+            // Title — height matches the measurement above, so a long wrapped title never bleeds
+            // into the question box beneath it.
+            GUI.Label(new Rect(mx + 20, my + titleTopPad, chromeInnerW, titleH), bannerTag, _headerStyle);
 
-            // Threat / Escalation Warning line
-            float fireGrowthLimit = Fire.FireManager.Instance != null ? Fire.FireManager.Instance.FireGrowthTime : 60f;
-            float fireRem = Fire.FireManager.Instance != null ? Fire.FireManager.Instance.RemainingSmallTime : fireGrowthLimit;
-            bool isSmall = Fire.FireManager.Instance == null || Fire.FireManager.Instance.IsSmallPhase;
-            string statusStr = isSmall
-                ? $"⚡ FLASH ESCALATION RISK — {fireRem:F1}s BEFORE COMPARTMENT FLASHOVER ⚡"
-                : "🚨 CRITICAL INFERNO LEVEL — LIFE HAZARD RISK CRITICAL 🚨";
-            _subHeaderStyle.normal.textColor = isSmall ? TacticalUITheme.FortniteAmber : TacticalUITheme.FortniteRed;
-            GUI.Label(new Rect(mx + 20, my + 44, modalWidth - 40, 20), statusStr, _subHeaderStyle);
-
-            // Rapid response timer bar
-            float elapsed = DecisionManager.Instance.StageTimer;
-            float timeRatio = Mathf.Clamp01(elapsed / q.timeLimit);
-            Rect timerBar = new Rect(mx + 30, my + 68, modalWidth - 60, 10);
-            Color barColor = elapsed <= 8f ? TacticalUITheme.FortniteGold : (elapsed <= 14f ? TacticalUITheme.FortniteAmber : TacticalUITheme.FortniteRed);
-            TacticalUITheme.DrawFortniteBar(timerBar, 1f - timeRatio, barColor, TacticalUITheme.CardSlotBg, 10);
-
-            // Question prompt box
-            Rect questionBox = new Rect(mx + 25, my + 86, modalWidth - 50, 60);
+            // Question prompt box — height matches the measurement above
+            Rect questionBox = new Rect(mx + 25, my + chromeH, innerW, questionH);
             TacticalUITheme.DrawFortniteCard(questionBox, TacticalUITheme.BorderSubtle, TacticalUITheme.CardSlotBg);
             GUI.Label(new Rect(questionBox.x + 12, questionBox.y + 8, questionBox.width - 24, questionBox.height - 16), q.questionText, _questionStyle);
 
             // 3 Chunky 3D Action Choice Buttons (Uniform Color - NO HINTS)
-            float optY = my + 158f;
-            float optH = 60f;
-            float optGap = 12f;
+            float optAreaY = my + chromeH + questionH + questionToOptions;
+            float optAreaH = modalHeight - (chromeH + questionH + questionToOptions) - bottomPad;
 
-            for (int i = 0; i < q.options.Count; i++)
+            if (needsScroll)
             {
-                var opt = q.options[i];
-                Rect optRect = new Rect(mx + 25, optY + i * (optH + optGap), modalWidth - 50, optH);
+                Rect viewRect = new Rect(mx + 25, optAreaY, innerW, optAreaH);
+                Rect contentRect = new Rect(0, 0, innerW - 16f, optListH);
+                _optionsScrollPos = GUI.BeginScrollView(viewRect, _optionsScrollPos, contentRect);
 
-                string badge = $"[{i + 1}] ";
-                string labelText = $"{badge}{opt.text.ToUpper()}";
-
-                Color optAccent = TacticalUITheme.FortniteBlue;
-                string neutralTag = $"[OPTION {i + 1}]";
-
-                if (TacticalUITheme.DrawFortniteButton(optRect, labelText, optAccent, _optionBtnStyle, neutralTag))
+                float sy = 0f;
+                for (int i = 0; i < optCount; i++)
                 {
-                    DecisionManager.Instance.SubmitDecision(i);
+                    string labelText = $"[{i + 1}] {q.options[i].text.ToUpper()}";
+                    if (TacticalUITheme.DrawFortniteButton(new Rect(0, sy, contentRect.width, optHeights[i]), labelText, TacticalUITheme.FortniteBlue, _optionBtnStyle))
+                    {
+                        DecisionManager.Instance.SubmitDecision(i);
+                    }
+                    sy += optHeights[i] + optGap;
+                }
+
+                GUI.EndScrollView();
+            }
+            else
+            {
+                float optY = optAreaY;
+                for (int i = 0; i < optCount; i++)
+                {
+                    string labelText = $"[{i + 1}] {q.options[i].text.ToUpper()}";
+                    if (TacticalUITheme.DrawFortniteButton(new Rect(mx + 25, optY, innerW, optHeights[i]), labelText, TacticalUITheme.FortniteBlue, _optionBtnStyle))
+                    {
+                        DecisionManager.Instance.SubmitDecision(i);
+                    }
+                    optY += optHeights[i] + optGap;
                 }
             }
-
-            // Quick bonus hint at bottom
-            string bonusHint = elapsed <= 8.0f ? "⚡ RAPID-RESPONSE BONUS ACTIVE (+25 BONUS PTS)" : "STANDARD RESPONSE PROTOCOL";
-            var hintStyle = new GUIStyle(_subHeaderStyle) { normal = { textColor = elapsed <= 8.0f ? TacticalUITheme.FortniteGold : new Color(0.6f, 0.7f, 0.8f) } };
-            GUI.Label(new Rect(mx + 20, my + modalHeight - 26, modalWidth - 40, 20), bonusHint, hintStyle);
         }
 
         private void DrawFeedbackModal()
@@ -187,18 +228,29 @@ namespace ARMiningSimulator.UI
             if (opt == null) return;
 
             // Fullscreen dark tactical scrim
-            TacticalUITheme.DrawRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.09f, 0.90f));
+            TacticalUITheme.DrawRect(new Rect(0, 0, TacticalUITheme.VW, TacticalUITheme.VH), new Color(0.04f, 0.05f, 0.09f, 0.90f));
 
-            float modalWidth = Mathf.Min(580f, Screen.width - 32f);
-            float modalHeight = 360f;
-            float mx = (Screen.width - modalWidth) * 0.5f;
-            float my = (Screen.height - modalHeight) * 0.5f;
+            float modalWidth = Mathf.Min(580f, TacticalUITheme.VW - 32f);
+            float innerW = modalWidth - 50f;
+
+            const float chromeH = 76f;     // title + score line, above the explanation box
+            const float boxToBtn = 20f;
+            const float btnH = 66f;
+            const float bottomPad = 20f;
+
+            // Explanation box shows a short confirmation only, per request (no detailed rule text).
+            string shortFeedback = opt.isCorrect ? "✅ Correct! Well done." : "❌ Incorrect — try again.";
+            float explanationH = Mathf.Max(TacticalUITheme.CalcTextHeight(_feedbackStyle, shortFeedback, innerW - 28f) + 24f, 60f);
+            float naturalH = chromeH + explanationH + boxToBtn + btnH + bottomPad;
+            float modalHeight = Mathf.Min(naturalH, TacticalUITheme.VH - 32f);
+            float mx = (TacticalUITheme.VW - modalWidth) * 0.5f;
+            float my = (TacticalUITheme.VH - modalHeight) * 0.5f;
             Rect modalRect = new Rect(mx, my, modalWidth, modalHeight);
 
             Color outcomeColor = opt.isCorrect ? TacticalUITheme.FortniteGreen : (opt.scoreModifier > 0 ? TacticalUITheme.FortniteAmber : TacticalUITheme.FortniteRed);
-            string ribbonTag = opt.isCorrect ? "/// OBJECTIVE VERIFIED ///" : "/// SAFETY VIOLATION ///";
 
-            TacticalUITheme.DrawFortniteCard(modalRect, outcomeColor, TacticalUITheme.FortniteNavyDark, ribbonTag, outcomeColor);
+            // Card with no ribbon tag — kept plain per request.
+            TacticalUITheme.DrawFortniteCard(modalRect, outcomeColor, TacticalUITheme.FortniteNavyDark);
 
             // Title
             string resultTitle = opt.isCorrect ? "🏆 CORRECT SURVIVAL ACTION!" : (opt.scoreModifier > 0 ? "⚠️ SUB-OPTIMAL PROCEDURE" : "🚨 HAZARDOUS VIOLATION LOGGED");
@@ -210,10 +262,9 @@ namespace ARMiningSimulator.UI
             int totalScore = DecisionManager.Instance.TotalScore;
             GUI.Label(new Rect(mx + 20, my + 48, modalWidth - 40, 20), $"SCORE IMPACT: {scoreSign} PTS  |  TOTAL SCORE: {totalScore} PTS", _subHeaderStyle);
 
-            // Explanation box
-            Rect expBox = new Rect(mx + 25, my + 76, modalWidth - 50, 160);
+            Rect expBox = new Rect(mx + 25, my + chromeH, innerW, explanationH);
             TacticalUITheme.DrawFortniteCard(expBox, TacticalUITheme.BorderSubtle, TacticalUITheme.CardSlotBg);
-            GUI.Label(new Rect(expBox.x + 14, expBox.y + 12, expBox.width - 28, expBox.height - 24), opt.explanation, _feedbackStyle);
+            GUI.Label(new Rect(expBox.x + 14, expBox.y + 12, expBox.width - 28, expBox.height - 24), shortFeedback, _feedbackStyle);
 
             // Proceed Action Button
             bool isFinal = DecisionManager.Instance.CurrentStage == DecisionStage.Stage2_Ventilation;
@@ -229,8 +280,8 @@ namespace ARMiningSimulator.UI
                 nextBtnText = "🔄 RE-EVALUATE: SELECT CORRECT SAFETY ACTION ➔";
             }
 
-            Rect nextBtnRect = new Rect(mx + 30, my + 265, modalWidth - 60, 60);
-            if (TacticalUITheme.DrawFortniteButton(nextBtnRect, nextBtnText, outcomeColor, _actionBtnStyle, opt.isCorrect ? "[CONTINUE]" : "[RETRY]"))
+            Rect nextBtnRect = new Rect(mx + 30, my + chromeH + explanationH + boxToBtn, modalWidth - 60, btnH);
+            if (TacticalUITheme.DrawFortniteButton(nextBtnRect, nextBtnText, outcomeColor, _actionBtnStyle))
             {
                 DecisionManager.Instance.ProceedAfterFeedback();
             }

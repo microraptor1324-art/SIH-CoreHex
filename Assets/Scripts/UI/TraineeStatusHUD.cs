@@ -95,28 +95,34 @@ namespace ARMiningSimulator.UI
 
             InitStyles();
 
-            // Always draw full-screen damage vignette when player takes damage
-            DrawDamageVignette();
-
-            // Game over / Incapacitated modal has highest priority
-            if (TraineeHealth.Instance != null && TraineeHealth.Instance.IsIncapacitated)
+            TacticalUITheme.BeginScaledGUI();
+            try
             {
-                DrawIncapacitatedModal();
-                return;
-            }
+                // Always draw full-screen damage vignette when player takes damage
+                DrawDamageVignette();
 
-            // If a decision or scorecard modal is active, suppress background HUD to avoid any overlap
-            if (TacticalUITheme.IsAnyModalOpen())
+                // Game over / Incapacitated modal has highest priority
+                if (TraineeHealth.Instance != null && TraineeHealth.Instance.IsIncapacitated)
+                {
+                    DrawIncapacitatedModal();
+                    return;
+                }
+
+                // If a decision or scorecard modal is active, suppress background HUD to avoid any overlap
+                if (TacticalUITheme.IsAnyModalOpen())
+                {
+                    return;
+                }
+
+                // Main gameplay HUD elements — positioned in isolated screen zones with guaranteed zero overlap
+                DrawHealthWidget();
+                DrawExtinguisherPickupPrompt();
+                DrawTargetingReticle();
+            }
+            finally
             {
-                return;
+                TacticalUITheme.EndScaledGUI();
             }
-
-            // Main gameplay HUD elements — positioned in isolated screen zones with guaranteed zero overlap
-            DrawHealthWidget();
-            DrawMissionClockWidget();
-            DrawFirePhaseBanner();
-            DrawExtinguisherPickupPrompt();
-            DrawTargetingReticle();
         }
 
         private void InitStyles()
@@ -210,8 +216,10 @@ namespace ARMiningSimulator.UI
             float maxHp = TraineeHealth.Instance != null ? TraineeHealth.Instance.MaxHealth : 100f;
             float ratio = Mathf.Clamp01(currentHp / maxHp);
 
-            float width = Mathf.Min(260f, Screen.width * 0.32f);
-            float height = 68f;
+            // Wide enough on every portrait width to hold "999 / 100 HP" on one line without
+            // the number, unit and status tag competing for the same cramped row.
+            float width = Mathf.Min(260f, TacticalUITheme.VW * 0.42f);
+            float height = TacticalUITheme.VitalsCardHeight;
             Rect cardRect = new Rect(16f, 16f, width, height);
 
             Color hpColor;
@@ -234,130 +242,30 @@ namespace ARMiningSimulator.UI
             }
 
             // Draw chunky Fortnite card plate
-            TacticalUITheme.DrawFortniteCard(cardRect, hpColor, TacticalUITheme.FortniteNavy, "➕ TRAINEE HEALTH", hpColor);
+            TacticalUITheme.DrawFortniteCard(cardRect, hpColor, TacticalUITheme.FortniteNavy, "➕ HEALTH", hpColor);
 
-            // Large Bold Health Readout
+            // Row 1: big number, then "/ MAX HP" measured and placed right after it — never a
+            // fixed offset — so it can't overlap on narrow cards.
             int hpInt = Mathf.CeilToInt(currentHp);
-            GUI.Label(new Rect(cardRect.x + 12f, cardRect.y + 14f, 70f, 26f), $"{hpInt}", _hudLargeNumStyle);
+            string numStr = hpInt.ToString();
+            float numW = _hudLargeNumStyle.CalcSize(new GUIContent(numStr)).x;
+            GUI.Label(new Rect(cardRect.x + 12f, cardRect.y + 12f, numW + 4f, 26f), numStr, _hudLargeNumStyle);
 
             _hudValueStyle.normal.textColor = new Color(0.75f, 0.85f, 0.95f);
-            GUI.Label(new Rect(cardRect.x + 82f, cardRect.y + 20f, 90f, 18f), $"/ {Mathf.CeilToInt(maxHp)} HP", _hudValueStyle);
+            float sufX = cardRect.x + 14f + numW;
+            float sufW = cardRect.x + cardRect.width - 12f - sufX;
+            if (sufW > 30f)
+            {
+                GUI.Label(new Rect(sufX, cardRect.y + 18f, sufW, 18f), $"/ {Mathf.CeilToInt(maxHp)} HP", _hudValueStyle);
+            }
 
+            // Row 2: status tag on its own full-width line — never squeezed beside the number.
             _hudStatusStyle.normal.textColor = hpColor;
-            GUI.Label(new Rect(cardRect.x + cardRect.width - 115f, cardRect.y + 20f, 105f, 16f), statusTag, _hudStatusStyle);
+            GUI.Label(new Rect(cardRect.x + 12f, cardRect.y + 38f, cardRect.width - 24f, 16f), statusTag, _hudStatusStyle);
 
-            // Chunky Fortnite Health Bar (Bright Lime Green with drop shadow)
-            Rect barRect = new Rect(cardRect.x + 12f, cardRect.y + 44f, cardRect.width - 24f, 14f);
+            // Row 3: health bar
+            Rect barRect = new Rect(cardRect.x + 12f, cardRect.y + 58f, cardRect.width - 24f, 14f);
             TacticalUITheme.DrawFortniteBar(barRect, ratio, hpColor, TacticalUITheme.CardSlotBg, 8);
-        }
-
-        // =========================================================================
-        // ZONE 2: TOP-RIGHT ARCADE MISSION SURVIVAL CLOCK
-        // =========================================================================
-        private void DrawMissionClockWidget()
-        {
-            float width = Mathf.Min(260f, Screen.width * 0.32f);
-            float height = 68f;
-            float rx = Screen.width - width - 16f;
-            Rect cardRect = new Rect(rx, 16f, width, height);
-
-            float timeElapsed = TraineeDetection.Instance != null ? TraineeDetection.Instance.ReactionTime : 0f;
-            string timeStr = FormatStopwatch(timeElapsed);
-
-            bool isDetected = TraineeDetection.Instance != null && TraineeDetection.Instance.HasDetectedFire;
-            float dwell = TraineeDetection.Instance != null ? TraineeDetection.Instance.DwellProgress : 0f;
-
-            Color accentCol;
-            string statusStr;
-            if (isDetected)
-            {
-                accentCol = TacticalUITheme.FortniteGreen;
-                statusStr = "🎯 HAZARD LOCKED";
-            }
-            else if (dwell > 0.01f)
-            {
-                accentCol = TacticalUITheme.FortniteAmber;
-                statusStr = $"LOCKING... {Mathf.RoundToInt(dwell * 100f)}%";
-            }
-            else
-            {
-                accentCol = TacticalUITheme.FortniteBlue;
-                statusStr = "SEARCHING HAZARD";
-            }
-
-            // Draw chunky Fortnite card plate
-            TacticalUITheme.DrawFortniteCard(cardRect, TacticalUITheme.FortniteGold, TacticalUITheme.FortniteNavy, "⏱️ SURVIVAL CLOCK", TacticalUITheme.FortniteGold);
-
-            // Large Gold Clock Readout
-            var clockStyle = new GUIStyle(_hudLargeNumStyle) { normal = { textColor = TacticalUITheme.FortniteGold }, fontSize = 20 };
-            GUI.Label(new Rect(cardRect.x + 12f, cardRect.y + 16f, 130f, 24f), timeStr, clockStyle);
-
-            _hudStatusStyle.normal.textColor = accentCol;
-            GUI.Label(new Rect(cardRect.x + cardRect.width - 115f, cardRect.y + 20f, 105f, 16f), statusStr, _hudStatusStyle);
-
-            // Target lock progress bar
-            Rect miniBar = new Rect(cardRect.x + 12f, cardRect.y + 44f, cardRect.width - 24f, 14f);
-            float lockRatio = isDetected ? 1.0f : dwell;
-            TacticalUITheme.DrawFortniteBar(miniBar, lockRatio, accentCol, TacticalUITheme.CardSlotBg, 6);
-        }
-
-        // =========================================================================
-        // ZONE 3: TOP-CENTER FORTNITE STORM-ALERT STYLE BANNER
-        // =========================================================================
-        private void DrawFirePhaseBanner()
-        {
-            if (FireManager.Instance == null || !FireManager.Instance.HasActiveFires) return;
-
-            // Priority Rule: If evacuation is actively guiding or extinguisher is equipped,
-            // yield center slot completely to those dedicated HUDs!
-            if (EvacuationManager.Instance != null && EvacuationManager.Instance.IsEvacuating) return;
-            if (ExtinguisherController.Instance != null && ExtinguisherController.Instance.IsEquipped) return;
-
-            bool isSmall = FireManager.Instance.IsSmallPhase;
-            float rem = FireManager.Instance.RemainingSmallTime;
-            float maxSmallTime = FireManager.Instance.FireGrowthTime;
-
-            float bannerW;
-            float bx;
-            float by;
-
-            if (Screen.width >= 960f)
-            {
-                bannerW = Mathf.Min(440f, Screen.width - 560f);
-                bx = (Screen.width - bannerW) * 0.5f;
-                by = 16f;
-            }
-            else
-            {
-                bannerW = Mathf.Min(440f, Screen.width - 32f);
-                bx = (Screen.width - bannerW) * 0.5f;
-                by = 86f;
-            }
-
-            Rect bannerRect = new Rect(bx, by, bannerW, 68f);
-
-            Color themeCol = isSmall ? TacticalUITheme.FortnitePurple : TacticalUITheme.FortniteRed;
-            string ribbonTag = isSmall ? "/// STORM / FLASH ESCALATION ///" : "/// CRITICAL INFERNO ///";
-
-            TacticalUITheme.DrawFortniteCard(bannerRect, themeCol, TacticalUITheme.FortniteNavy, ribbonTag, themeCol);
-
-            string title = isSmall
-                ? $"⚡ FLASH OVER IN: {rem:F1}s ⚡"
-                : $"🚨 DRIFT INFERNO ACTIVE (>{maxSmallTime:F0}s) 🚨";
-
-            var titleStyle = new GUIStyle(_hudValueStyle)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = 15,
-                normal = { textColor = isSmall ? TacticalUITheme.FortniteGold : TacticalUITheme.FortniteRed }
-            };
-            GUI.Label(new Rect(bx + 10, by + 16, bannerW - 20, 22), title, titleStyle);
-
-            // Chunky Segmented Countdown Bar
-            float ratio = Mathf.Clamp01(FireManager.Instance.ScenarioTimer / maxSmallTime);
-            Rect barRect = new Rect(bx + 16, by + 42, bannerW - 32, 14);
-            Color barFill = isSmall ? TacticalUITheme.FortnitePurple : TacticalUITheme.FortniteRed;
-            TacticalUITheme.DrawFortniteBar(barRect, 1f - ratio, barFill, TacticalUITheme.CardSlotBg, 10);
         }
 
         // =========================================================================
@@ -369,10 +277,10 @@ namespace ARMiningSimulator.UI
             if (Environment.WorldFireExtinguisher.Instance.IsTaken) return;
             if (!Environment.WorldFireExtinguisher.Instance.IsPlayerInRange) return;
 
-            float btnW = Mathf.Min(360f, Screen.width - 40f);
+            float btnW = Mathf.Min(360f, TacticalUITheme.VW - 40f);
             float btnH = 64f;
-            float bx = (Screen.width - btnW) * 0.5f;
-            float by = Screen.height - btnH - 30f;
+            float bx = (TacticalUITheme.VW - btnW) * 0.5f;
+            float by = TacticalUITheme.VH - btnH - 30f;
             Rect promptRect = new Rect(bx, by, btnW, btnH);
 
             if (TacticalUITheme.DrawFortniteButton(promptRect, "🧯 EQUIP EXTINGUISHER (TAP / 'E')", TacticalUITheme.FortniteGold, _actionBtnStyle, "[EPIC LOOT]"))
@@ -392,8 +300,8 @@ namespace ARMiningSimulator.UI
             if (progress <= 0.01f) return;
 
             float size = Mathf.Lerp(85f, 42f, progress);
-            float cx = Screen.width * 0.5f;
-            float cy = Screen.height * 0.5f;
+            float cx = TacticalUITheme.VW * 0.5f;
+            float cy = TacticalUITheme.VH * 0.5f;
 
             Color reticleColor = Color.Lerp(TacticalUITheme.FortniteAmber, TacticalUITheme.FortniteGreen, progress);
             Rect reticleRect = new Rect(cx - size, cy - size, size * 2f, size * 2f);
@@ -415,21 +323,21 @@ namespace ARMiningSimulator.UI
                 Color vignetteColor = new Color(TacticalUITheme.FortniteRed.r, TacticalUITheme.FortniteRed.g, TacticalUITheme.FortniteRed.b, flashAlpha * 0.45f);
                 float border = 35f;
 
-                TacticalUITheme.DrawRect(new Rect(0, 0, Screen.width, border), vignetteColor);
-                TacticalUITheme.DrawRect(new Rect(0, Screen.height - border, Screen.width, border), vignetteColor);
-                TacticalUITheme.DrawRect(new Rect(0, 0, border, Screen.height), vignetteColor);
-                TacticalUITheme.DrawRect(new Rect(Screen.width - border, 0, border, Screen.height), vignetteColor);
+                TacticalUITheme.DrawRect(new Rect(0, 0, TacticalUITheme.VW, border), vignetteColor);
+                TacticalUITheme.DrawRect(new Rect(0, TacticalUITheme.VH - border, TacticalUITheme.VW, border), vignetteColor);
+                TacticalUITheme.DrawRect(new Rect(0, 0, border, TacticalUITheme.VH), vignetteColor);
+                TacticalUITheme.DrawRect(new Rect(TacticalUITheme.VW - border, 0, border, TacticalUITheme.VH), vignetteColor);
             }
         }
 
         private void DrawIncapacitatedModal()
         {
-            TacticalUITheme.DrawRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.08f, 0.88f));
+            TacticalUITheme.DrawRect(new Rect(0, 0, TacticalUITheme.VW, TacticalUITheme.VH), new Color(0.04f, 0.05f, 0.08f, 0.88f));
 
-            float modalWidth = Mathf.Min(500f, Screen.width - 32f);
+            float modalWidth = Mathf.Min(500f, TacticalUITheme.VW - 32f);
             float modalHeight = 310f;
-            float mx = (Screen.width - modalWidth) * 0.5f;
-            float my = (Screen.height - modalHeight) * 0.5f;
+            float mx = (TacticalUITheme.VW - modalWidth) * 0.5f;
+            float my = (TacticalUITheme.VH - modalHeight) * 0.5f;
             Rect modalRect = new Rect(mx, my, modalWidth, modalHeight);
 
             TacticalUITheme.DrawFortniteCard(modalRect, TacticalUITheme.FortniteRed, TacticalUITheme.FortniteNavyDark, "/// ELIMINATED // CASUALTY ///", TacticalUITheme.FortniteRed);
@@ -470,11 +378,5 @@ namespace ARMiningSimulator.UI
             }
         }
 
-        private string FormatStopwatch(float seconds)
-        {
-            int mins = Mathf.FloorToInt(seconds / 60f);
-            float secs = seconds % 60f;
-            return $"{mins:00}:{secs:04.1f}s";
-        }
     }
 }

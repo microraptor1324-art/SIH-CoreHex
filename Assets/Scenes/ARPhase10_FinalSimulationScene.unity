@@ -402,6 +402,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f7a8b9c0d1e241e2bf6c72d95e013442, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.Investigation.InvestigationManager
+  _manualOriginOverride: {fileID: 0}
 --- !u!114 &1045998494
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -472,6 +473,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.Fire.FireManager
   _equipmentSpawner: {fileID: 1045998501}
   _spreadSystem: {fileID: 1045998499}
+  _selectedPreset: 0
+  _scenarioSeverity: 0
   _autoStartOnEnvironmentReady: 0
   _delayBeforeIgnition: 1.5
 --- !u!114 &1045998499
@@ -504,6 +507,9 @@ MonoBehaviour:
   _defaultLength: 5.2
   _defaultWidth: 4.2
   _autoGenerateOnStart: 0
+  _delayEquipmentGeneration: 1
+  _equipmentDelaySeconds: 2
+  _electricalStaggerSeconds: 1
   _equipmentSpawner: {fileID: 1045998501}
   _arCamera: {fileID: 1180320819}
   _anchorManager: {fileID: 1045998509}
@@ -544,10 +550,10 @@ MonoBehaviour:
   _widthText: {fileID: 0}
   _areaText: {fileID: 0}
   _guidanceText: {fileID: 0}
-  _autoDetectButton: {fileID: 0}
+  _addFlagButton: {fileID: 0}
+  _closeRoomButton: {fileID: 0}
   _undoButton: {fileID: 0}
-  _clearButton: {fileID: 0}
-  _confirmButton: {fileID: 0}
+  _resetButton: {fileID: 0}
 --- !u!114 &1045998503
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -578,9 +584,13 @@ MonoBehaviour:
   _flagManager: {fileID: 1045998511}
   _lineManager: {fileID: 1045998512}
   _polygonManager: {fileID: 1045998513}
-  _planeManager: {fileID: 1045998506}
-  _arCamera: {fileID: 1180320819}
+  _mineGenerator: {fileID: 0}
+  _autoGenerateOnClose: 0
   _arSession: {fileID: 1996765853}
+  _planeManager: {fileID: 1045998506}
+  _occlusionManager: {fileID: 0}
+  _arCamera: {fileID: 1180320819}
+  _verboseDebugLogs: 1
 --- !u!114 &1045998505
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -647,6 +657,115 @@ Transform:
   - {fileID: 1384290099}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1045998509
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1045998484}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 728ad7fae8e460a4ba41265c7308d757, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.XR.ARFoundation::UnityEngine.XR.ARFoundation.ARAnchorManager
+  <trackablesChanged>k__BackingField:
+    m_PersistentCalls:
+      m_Calls: []
+  m_AnchorPrefab: {fileID: 0}
+--- !u!114 &1045998510
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1045998484}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b1a2c3d4e5f641e2bf6c72d95e013451, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.AR.ARRaycastController
+  _raycastManager: {fileID: 1045998505}
+  _planeManager: {fileID: 1045998506}
+  _occlusionManager: {fileID: 0}
+  _arCamera: {fileID: 1180320819}
+  _reticleLerpSpeed: 24
+  _teleportThreshold: 0.45
+  _readyColor: {r: 0.15, g: 0.95, b: 0.45, a: 0.95}
+  _steadyColor: {r: 0.95, g: 0.85, b: 0.15, a: 0.95}
+  _invalidColor: {r: 0.95, g: 0.25, b: 0.25, a: 0.75}
+  _trackingColor: {r: 1, g: 0.55, b: 0.1, a: 0.85}
+--- !u!114 &1045998511
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1045998484}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b1a2c3d4e5f641e2bf6c72d95e013452, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.AR.ARFlagManager
+  _anchorManager: {fileID: 1045998509}
+  _arCamera: {fileID: 1180320819}
+  _flagPoleColor: {r: 0.9, g: 0.9, b: 0.95, a: 1}
+  _flagHeadColor: {r: 0.95, g: 0.25, b: 0.2, a: 1}
+  _poleHeight: 0.25
+  _poleRadius: 0.02
+--- !u!114 &1045998512
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1045998484}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b1a2c3d4e5f641e2bf6c72d95e013453, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.AR.MeasurementLineManager
+  _lockedLineColor: {r: 0.1, g: 0.85, b: 1, a: 0.95}
+  _previewLineColor: {r: 1, g: 0.9, b: 0.2, a: 0.9}
+  _closingLineColor: {r: 0.2, g: 1, b: 0.45, a: 0.95}
+  _lineWidth: 0.025
+  _arCamera: {fileID: 1180320819}
+--- !u!114 &1045998513
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1045998484}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b1a2c3d4e5f641e2bf6c72d95e013454, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.AR.RoomPolygonManager
+  _shadingColor: {r: 0, g: 0.4, b: 1, a: 0.4}
+  _boundaryGlowColor: {r: 0.1, g: 0.6, b: 1, a: 0.95}
+  _enableFadingWalls: 1
+  _wallHeight: 5
+  _wallVerticalSegments: 16
+--- !u!114 &1045998514
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1045998484}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ebae2a13f874a5440bfb28118ff4e452, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.UI.MiningEnvironmentUI
+  _generator: {fileID: 1045998500}
+  _arCamera: {fileID: 1180320819}
+  _infoText: {fileID: 0}
+  _equipmentText: {fileID: 0}
+  _exitDistanceText: {fileID: 0}
+  _regenerateButton: {fileID: 0}
+  _startTrainingButton: {fileID: 0}
 --- !u!1 &1180320818
 GameObject:
   m_ObjectHideFlags: 0
@@ -789,6 +908,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.Extinguisher.ExtinguisherController
   _traineeCamera: {fileID: 1180320819}
+  _secondsToExtinguish: 7
+  _aimConeHalfAngle: 30
 --- !u!114 &1180320823
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -881,8 +1002,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4966719baa26e4b0e8231a24d9bd491a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.XR.ARFoundation::UnityEngine.XR.ARFoundation.ARCameraManager
-  m_FocusMode: 1
-  m_LightEstimationMode: 0
+  m_FocusMode: -1
+  m_LightEstimationMode: -1
   m_AutoFocus: 1
   m_ImageStabilization: 0
   m_LightEstimation: 0
@@ -902,6 +1023,62 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1384290099}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1368436820
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1368436822}
+  - component: {fileID: 1368436821}
+  m_Layer: 0
+  m_Name: VoiceOverManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1368436821
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1368436820}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c7f21dde65ab7547b896e6c418a7701, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.Audio.VoiceOverManager
+  _fireSpottedClip: {fileID: 8300000, guid: 39232f678f49c854c958cb68c5d2a8c6, type: 3}
+  _escapeClip: {fileID: 8300000, guid: 39d9eb5b21d6b7449919e54ae6e01cbe, type: 3}
+  _holdToExtinguishClip: {fileID: 8300000, guid: 6543b4ee42294ea418e46f1803a73505, type: 3}
+  _allFiresSuppressedClip: {fileID: 8300000, guid: 9fdc5c50d97f5db49952ce57e80e7328, type: 3}
+  _yourScoreClip: {fileID: 8300000, guid: 48034f5cf8672be458f718fdbd1465dd, type: 3}
+  _decision1Clip: {fileID: 8300000, guid: b6b393971c6948c4dbe0c87f9a885c87, type: 3}
+  _decision2Clip: {fileID: 8300000, guid: ac43e6ec1fca69a4489f656cce50f289, type: 3}
+  _decision3Clip: {fileID: 8300000, guid: df419d0b9680bb74db9f4c1922d4375c, type: 3}
+  _tacticalActionProtocolClip: {fileID: 8300000, guid: dcd46577b6a486242a14172f4ecaadbe, type: 3}
+  _identifyClip: {fileID: 8300000, guid: db48f594fcbde8c4a92f4556932d215b, type: 3}
+  _correctAnswerClip: {fileID: 8300000, guid: 4db2d33fa64e1bf448cde0b1d1f22fe4, type: 3}
+  _wrongAnswerClip: {fileID: 8300000, guid: 04fa9f04c0a4a874dbc1e78a0e64e00d, type: 3}
+--- !u!4 &1368436822
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1368436820}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1384290098
 GameObject:
@@ -995,103 +1172,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1045998509
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1045998484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 728ad7fae8e460a4ba41265c7308d757, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.XR.ARFoundation::UnityEngine.XR.ARFoundation.ARAnchorManager
-  <trackablesChanged>k__BackingField:
-    m_PersistentCalls:
-      m_Calls: []
-  m_AnchorPrefab: {fileID: 0}
---- !u!114 &1045998510
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1045998484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b1a2c3d4e5f641e2bf6c72d95e013451, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.AR.ARRaycastController
-  _raycastManager: {fileID: 1045998505}
-  _planeManager: {fileID: 1045998506}
-  _arCamera: {fileID: 1180320819}
---- !u!114 &1045998511
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1045998484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b1a2c3d4e5f641e2bf6c72d95e013452, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.AR.ARFlagManager
-  _anchorManager: {fileID: 1045998509}
-  _arCamera: {fileID: 1180320819}
-  _flagPoleColor: {r: 0.9, g: 0.9, b: 0.95, a: 1}
-  _flagHeadColor: {r: 0.95, g: 0.25, b: 0.2, a: 1}
-  _poleHeight: 0.25
-  _poleRadius: 0.02
---- !u!114 &1045998512
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1045998484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b1a2c3d4e5f641e2bf6c72d95e013453, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.AR.MeasurementLineManager
-  _lockedLineColor: {r: 0.1, g: 0.85, b: 1, a: 0.95}
-  _previewLineColor: {r: 1, g: 0.9, b: 0.2, a: 0.9}
-  _closingLineColor: {r: 0.2, g: 1, b: 0.45, a: 0.95}
-  _lineWidth: 0.025
-  _arCamera: {fileID: 1180320819}
---- !u!114 &1045998513
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1045998484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b1a2c3d4e5f641e2bf6c72d95e013454, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.AR.RoomPolygonManager
-  _shadingColor: {r: 0, g: 0.4, b: 1, a: 0.4}
-  _boundaryGlowColor: {r: 0.1, g: 0.6, b: 1, a: 0.95}
-  _enableFadingWalls: 1
-  _wallHeight: 5
-  _wallVerticalSegments: 16
---- !u!114 &1045998514
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1045998484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ebae2a13f874a5440bfb28118ff4e452, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ARMiningSimulator.UI.MiningEnvironmentUI
-  _generator: {fileID: 1045998500}
-  _arCamera: {fileID: 1180320819}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1099,3 +1179,4 @@ SceneRoots:
   - {fileID: 209402854}
   - {fileID: 1996765854}
   - {fileID: 1045998508}
+  - {fileID: 1368436822}

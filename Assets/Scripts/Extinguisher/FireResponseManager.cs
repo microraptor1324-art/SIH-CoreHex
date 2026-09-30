@@ -14,8 +14,7 @@ namespace ARMiningSimulator.Extinguisher
         Stage3A_ActionChoice = 2,
         Stage3B_AgentSelection = 3,
         PASS_Discharge = 4,
-        Extinguished = 5,
-        EscalatedToRescue = 6
+        Extinguished = 5
     }
 
     /// <summary>
@@ -47,6 +46,16 @@ namespace ARMiningSimulator.Extinguisher
         private string _burningTargetName = "Mining Equipment";
         private bool _isTargetElectrical = false;
         private bool _isTargetMachinery = false;
+
+        // Each decision point's score is locked in on the FIRST submission attempt only — without
+        // this, retrying after a wrong answer (the question re-opens automatically) would let
+        // SubmitFireSizeAssessment/SubmitTacticalAction re-apply their penalty every single retry,
+        // spiraling the score arbitrarily negative instead of the one-time "-25 PTS"/"-60 PTS" etc.
+        // the feedback text actually claims.
+        private bool _sizeEvalScored = false;
+        private int _sizeEvalLockedScore = 0;
+        private bool _actionChoiceScored = false;
+        private int _actionChoiceLockedScore = 0;
 
         // Events
         public static event Action<FireResponseState> OnStateChanged;
@@ -97,47 +106,52 @@ namespace ARMiningSimulator.Extinguisher
         public void StartStage3A()
         {
             CancelInvoke(nameof(StartStage3A));
-            float growthLimit = FireManager.Instance != null ? FireManager.Instance.FireGrowthTime : 60.0f;
-            _isActuallyBig = (FireManager.Instance != null && FireManager.Instance.ScenarioTimer >= growthLimit) ||
-                             (FireManager.Instance != null && FireManager.Instance.GetHighestSeverity() >= FireSeverity.Large);
+
+            // Fire size was already decided once, randomly, at ignition (see FireManager) and
+            // growth has been frozen ever since — just read the fixed severity here.
+            _isActuallyBig = FireManager.Instance != null && FireManager.Instance.GetHighestSeverity() >= FireSeverity.Large;
 
             _state = FireResponseState.Stage3A_FireSizeEval;
             _isShowingFeedback = false;
-            float timer = FireManager.Instance != null ? FireManager.Instance.ScenarioTimer : 0f;
-            Debug.Log($"[FireResponseManager] 📋 Starting Decision 3 at Safe Area: Fire Size Assessment. (Elapsed: {timer:F1}s / {growthLimit:F0}s limit, Fire is {(_isActuallyBig ? "BIG" : "SMALL")})");
+            _sizeEvalScored = false;
+            _sizeEvalLockedScore = 0;
+            Debug.Log($"[FireResponseManager] 📋 Starting Decision 3 at Safe Area: Fire Size Assessment. (Fire is {(_isActuallyBig ? "BIG" : "SMALL")})");
             OnStateChanged?.Invoke(_state);
         }
 
         public void SubmitFireSizeAssessment(bool choseBig)
         {
-            float growthLimit = FireManager.Instance != null ? FireManager.Instance.FireGrowthTime : 60.0f;
-            _isActuallyBig = (FireManager.Instance != null && FireManager.Instance.ScenarioTimer >= growthLimit) ||
-                             (FireManager.Instance != null && FireManager.Instance.GetHighestSeverity() >= FireSeverity.Large);
+            _isActuallyBig = FireManager.Instance != null && FireManager.Instance.GetHighestSeverity() >= FireSeverity.Large;
             _choseBig = choseBig;
             _isShowingFeedback = true;
 
-            float elapsed = FireManager.Instance != null ? FireManager.Instance.ScenarioTimer : 0f;
+            // Score is locked in on the first attempt only — retrying after a wrong answer never
+            // re-applies the penalty or re-earns the bonus, it just lets the trainee try again.
+            if (!_sizeEvalScored)
+            {
+                _sizeEvalLockedScore = (_choseBig == _isActuallyBig) ? 50 : -25;
+                _responseScore += _sizeEvalLockedScore;
+                _sizeEvalScored = true;
+            }
 
             if (_choseBig == _isActuallyBig)
             {
-                _responseScore += 50;
                 _isFeedbackCorrect = true;
                 _lastFeedbackText = "CORRECT SIZE EVALUATION! (+50 PTS)\n" +
                     (_isActuallyBig
-                        ? $"You accurately evaluated that this hazard is a BIG FIRE ({elapsed:F1}s elapsed > {growthLimit:F0}s). Roaring flames, rolling toxic smoke, and intense radiant heat require remaining in safety."
-                        : $"You accurately evaluated that this hazard is a SMALL FIRE ({elapsed:F1}s elapsed < {growthLimit:F0}s). The fire is an incipient flame localized to a single equipment component and can be fought with an extinguisher.");
+                        ? "You accurately evaluated that this hazard is a BIG FIRE. Roaring flames, rolling toxic smoke, and intense radiant heat require remaining in safety."
+                        : "You accurately evaluated that this hazard is a SMALL FIRE. The fire is an incipient flame localized to a single equipment component and can be fought with an extinguisher.");
             }
             else
             {
-                _responseScore -= 25;
                 _isFeedbackCorrect = false;
                 _lastFeedbackText = "INCORRECT SIZE ASSESSMENT (-25 PTS):\n" +
                     (_isActuallyBig
-                        ? $"More than {growthLimit:F0} seconds have elapsed ({elapsed:F1}s)! The fire has grown into a BIG FIRE with rolling smoke and intense radiant heat. Re-evaluate and select Big Fire!"
-                        : $"The fire ignited less than {growthLimit:F0} seconds ago ({elapsed:F1}s) and is still a SMALL (Incipient) FIRE localized to the equipment. Re-evaluate and select Small Fire!");
+                        ? "This is actually a BIG FIRE with rolling smoke and intense radiant heat. Re-evaluate and select Big Fire!"
+                        : "This is actually a SMALL (Incipient) FIRE localized to the equipment. Re-evaluate and select Small Fire!");
             }
 
-            OnEvaluationFeedback?.Invoke(_lastFeedbackText, _isFeedbackCorrect, _isFeedbackCorrect ? 50 : -25);
+            OnEvaluationFeedback?.Invoke(_lastFeedbackText, _isFeedbackCorrect, _sizeEvalLockedScore);
         }
 
         public void ProceedAfterSizeFeedback()
@@ -157,31 +171,45 @@ namespace ARMiningSimulator.Extinguisher
 
         public void ProceedToActionChoice()
         {
-            float growthLimit = FireManager.Instance != null ? FireManager.Instance.FireGrowthTime : 60.0f;
-            _isActuallyBig = (FireManager.Instance != null && FireManager.Instance.ScenarioTimer >= growthLimit) ||
-                             (FireManager.Instance != null && FireManager.Instance.GetHighestSeverity() >= FireSeverity.Large);
+            _isActuallyBig = FireManager.Instance != null && FireManager.Instance.GetHighestSeverity() >= FireSeverity.Large;
             _isShowingFeedback = false;
             _state = FireResponseState.Stage3A_ActionChoice;
+            _actionChoiceScored = false;
+            _actionChoiceLockedScore = 0;
             Debug.Log($"[FireResponseManager] 📋 Starting Stage 3A Action Choice at Safe Area. Fire is {(_isActuallyBig ? "BIG" : "SMALL")}.");
             OnStateChanged?.Invoke(_state);
         }
 
         public void SubmitTacticalAction(bool chooseToFight)
         {
-            float growthLimit = FireManager.Instance != null ? FireManager.Instance.FireGrowthTime : 60.0f;
-            _isActuallyBig = (FireManager.Instance != null && FireManager.Instance.ScenarioTimer >= growthLimit) ||
-                             (FireManager.Instance != null && FireManager.Instance.GetHighestSeverity() >= FireSeverity.Large);
+            _isActuallyBig = FireManager.Instance != null && FireManager.Instance.GetHighestSeverity() >= FireSeverity.Large;
             _isShowingFeedback = true;
+
+            // Score is locked in on the first attempt only — retrying after a wrong answer never
+            // re-applies the penalty or re-earns the bonus, it just lets the trainee try again.
+            bool isCorrectChoice = _isActuallyBig ? !chooseToFight : chooseToFight;
+            if (!_actionChoiceScored)
+            {
+                if (isCorrectChoice) _actionChoiceLockedScore = 100;
+                else _actionChoiceLockedScore = _isActuallyBig ? -60 : -30;
+                _responseScore += _actionChoiceLockedScore;
+                _actionChoiceScored = true;
+            }
 
             if (_isActuallyBig)
             {
                 if (!chooseToFight)
                 {
                     // Correct: Big fire -> Stay safe!
-                    _responseScore += 100;
                     _isFeedbackCorrect = true;
-                    _lastFeedbackText = $"CORRECT LIFE-SAFETY PROTOCOL! (+100 PTS)\nMSHA Mining Safety Standard: Always prioritize personal life safety. A Big underground fire (>{growthLimit:F0}s) CANNOT be fought with portable extinguishers. Stay safe in the refuge/evacuation zone and summon specialized Mine Rescue teams.\n\n🚨 AUTOMATED SUPPRESSION SYSTEM ACTIVATED: Mine deluge nozzles deployed and the fire has been safely extinguished.";
-                    _state = FireResponseState.EscalatedToRescue;
+                    _lastFeedbackText = "CORRECT LIFE-SAFETY PROTOCOL! (+100 PTS)\nMSHA Mining Safety Standard: Always prioritize personal life safety. A Big underground fire CANNOT be fought with portable extinguishers. Stay safe in the refuge/evacuation zone and summon specialized Mine Rescue teams.\n\n🚨 AUTOMATED SUPPRESSION SYSTEM ACTIVATED: Mine deluge nozzles deployed and the fire has been safely extinguished.";
+                    // NOTE: _state deliberately stays Stage3A_ActionChoice here — the UI's feedback
+                    // modal only renders while state == Stage3A_ActionChoice && IsShowingFeedback.
+                    // Setting it to EscalatedToRescue here (as this used to do) changed the state
+                    // away from what the UI checks before the player ever saw the feedback modal,
+                    // leaving the screen blank with no way to proceed. ProceedAfterActionFeedback()
+                    // (called when the player taps the feedback modal's Proceed button) is the
+                    // correct place to move the flow on to the investigation stage.
 
                     // Automatically extinguish the fire
                     if (FireManager.Instance != null)
@@ -189,35 +217,32 @@ namespace ARMiningSimulator.Extinguisher
                         FireManager.Instance.ExtinguishAllFires();
                     }
 
-                    OnEvaluationFeedback?.Invoke(_lastFeedbackText, true, 100);
+                    OnEvaluationFeedback?.Invoke(_lastFeedbackText, true, _actionChoiceLockedScore);
                 }
                 else
                 {
                     // Critical Error: Trying to fight a big fire
-                    _responseScore -= 60;
                     _isFeedbackCorrect = false;
                     _lastFeedbackText = "CRITICAL SAFETY VIOLATION (-60 PTS)!\nNever attempt to fight a Big or fully developed mine fire alone with portable canisters. Toxic carbon monoxide and thermal flashover will overpower personnel. Re-evaluate and choose 'Stay in safety'!";
-                    OnEvaluationFeedback?.Invoke(_lastFeedbackText, false, -60);
+                    OnEvaluationFeedback?.Invoke(_lastFeedbackText, false, _actionChoiceLockedScore);
                 }
             }
             else
             {
-                // Small fire (< 60s)
+                // Small (incipient) fire
                 if (chooseToFight)
                 {
                     // Correct: Small fire -> Fight the fire!
-                    _responseScore += 100;
                     _isFeedbackCorrect = true;
-                    _lastFeedbackText = $"CORRECT PROTOCOL! (+100 PTS)\nMSHA Mining Safety Standard: Incipient (Small) fires (<{growthLimit:F0}s) with an unblocked retreat path must be immediately attacked using the portable fire extinguisher stationed right here at the Safe Area before they spread.";
-                    OnEvaluationFeedback?.Invoke(_lastFeedbackText, true, 100);
+                    _lastFeedbackText = "CORRECT PROTOCOL! (+100 PTS)\nMSHA Mining Safety Standard: Incipient (Small) fires with an unblocked retreat path must be immediately attacked using the portable fire extinguisher stationed right here at the Safe Area before they spread.";
+                    OnEvaluationFeedback?.Invoke(_lastFeedbackText, true, _actionChoiceLockedScore);
                 }
                 else
                 {
                     // Incorrect: Abandoning a fightable small fire
-                    _responseScore -= 30;
                     _isFeedbackCorrect = false;
-                    _lastFeedbackText = $"INCORRECT TACTICAL DECISION (-30 PTS):\nWhile personal safety is important, leaving a small incipient fire (<{growthLimit:F0}s) unattended underground allows it to rapidly escalate and trap working crews. You must take the fire extinguisher located at the Safe Area and fight the fire!";
-                    OnEvaluationFeedback?.Invoke(_lastFeedbackText, false, -30);
+                    _lastFeedbackText = "INCORRECT TACTICAL DECISION (-30 PTS):\nWhile personal safety is important, leaving a small incipient fire unattended underground allows it to rapidly escalate and trap working crews. You must take the fire extinguisher located at the Safe Area and fight the fire!";
+                    OnEvaluationFeedback?.Invoke(_lastFeedbackText, false, _actionChoiceLockedScore);
                 }
             }
         }
@@ -292,73 +317,36 @@ namespace ARMiningSimulator.Extinguisher
             OnStateChanged?.Invoke(_state);
         }
 
-        public void SubmitExtinguisherSelection(ExtinguisherType chosenType)
+        /// <summary>
+        /// There is only one "pick the extinguisher" action now, no 3-way agent quiz — the correct
+        /// agent for the burning target is auto-resolved and always awarded full points. Still
+        /// teaches which agent matches which hazard type via the feedback text, just without
+        /// requiring the trainee to guess among CO2/Dry Powder/Foam.
+        /// </summary>
+        public void PickFireExtinguisher()
         {
+            ExtinguisherType chosenType = _isTargetElectrical ? ExtinguisherType.CO2
+                : _isTargetMachinery ? ExtinguisherType.DryPowder
+                : ExtinguisherType.WaterFoam;
+
             _selectedExtinguisher = chosenType;
             _isShowingFeedback = true;
-
-            int scoreDelta = 0;
-            _isFeedbackCorrect = false;
+            _isFeedbackCorrect = true;
 
             if (_isTargetElectrical)
             {
-                if (chosenType == ExtinguisherType.CO2)
-                {
-                    scoreDelta = 100;
-                    _isFeedbackCorrect = true;
-                    _lastFeedbackText = "CORRECT AGENT! (+100 PTS)\nCarbon Dioxide (CO₂ - Black Band) is electrically non-conductive, non-corrosive, and leaves zero residue, making it the mandatory standard agent for High-Voltage Switchboards, Transformers, and Electrical Panels.";
-                }
-                else if (chosenType == ExtinguisherType.DryPowder)
-                {
-                    scoreDelta = 50;
-                    _isFeedbackCorrect = false;
-                    _lastFeedbackText = "ACCEPTABLE BUT SUB-OPTIMAL (+50 PTS):\nABC Dry Chemical Powder is non-conductive, but leaves corrosive chemical residue that permanently ruins electrical contacts. CO₂ is the preferred clean agent for switchgear.";
-                }
-                else
-                {
-                    scoreDelta = -80;
-                    _isFeedbackCorrect = false;
-                    _lastFeedbackText = "CRITICAL FATAL BREACH (-80 PTS)!\nWater and foam are electrically conductive. Spraying liquid onto energized high-voltage equipment carries an extreme risk of lethal electrocution!";
-                }
+                _lastFeedbackText = "CORRECT AGENT! (+100 PTS)\nCarbon Dioxide (CO₂ - Black Band) is electrically non-conductive, non-corrosive, and leaves zero residue, making it the mandatory standard agent for High-Voltage Switchboards, Transformers, and Electrical Panels.";
             }
             else if (_isTargetMachinery)
             {
-                if (chosenType == ExtinguisherType.DryPowder)
-                {
-                    scoreDelta = 100;
-                    _isFeedbackCorrect = true;
-                    _lastFeedbackText = "CORRECT AGENT! (+100 PTS)\nABC Dry Chemical Powder (Blue Band) creates a rapid smothering chemical barrier over Conveyor Belts, Continuous Miner, Scooptram (LHD), and Drilling machinery.";
-                }
-                else if (chosenType == ExtinguisherType.CO2)
-                {
-                    scoreDelta = 40;
-                    _isFeedbackCorrect = false;
-                    _lastFeedbackText = "INEFFECTIVE (+40 PTS):\nCO₂ gas rapidly disperses in the ventilated mine drift without cooling hot metal roller bearings or preventing rubber conveyor belt re-ignition. Dry chemical powder is required.";
-                }
-                else
-                {
-                    scoreDelta = -40;
-                    _isFeedbackCorrect = false;
-                    _lastFeedbackText = "INCORRECT AGENT (-40 PTS):\nAFFF Foam / Water is designed for Class A solid fuels and is ineffective against pressurized hydraulic fuel sprays or enclosed machine gearboxes.";
-                }
+                _lastFeedbackText = "CORRECT AGENT! (+100 PTS)\nABC Dry Chemical Powder (Blue Band) creates a rapid smothering chemical barrier over Conveyor Belts, Continuous Miner, Scooptram (LHD), and Drilling machinery.";
             }
             else
             {
-                // Class A timber/solids
-                if (chosenType == ExtinguisherType.WaterFoam)
-                {
-                    scoreDelta = 100;
-                    _isFeedbackCorrect = true;
-                    _lastFeedbackText = "CORRECT AGENT! (+100 PTS)\nAFFF Foam / Water (Cream Band) penetrates deep-seated embers in Class A timber cribbing and coal pack solids.";
-                }
-                else
-                {
-                    scoreDelta = 40;
-                    _isFeedbackCorrect = false;
-                    _lastFeedbackText = "PARTIAL: Water/Foam is required to penetrate Class A deep-seated timber embers.";
-                }
+                _lastFeedbackText = "CORRECT AGENT! (+100 PTS)\nAFFF Foam / Water (Cream Band) penetrates deep-seated embers in Class A timber cribbing and coal pack solids.";
             }
 
+            const int scoreDelta = 100;
             _responseScore += scoreDelta;
             OnEvaluationFeedback?.Invoke(_lastFeedbackText, _isFeedbackCorrect, scoreDelta);
         }
@@ -434,8 +422,22 @@ namespace ARMiningSimulator.Extinguisher
         {
             if (_state == FireResponseState.Extinguished) return;
 
+            // The big-fire "stay in safety" path auto-extinguishes the fire as a side effect
+            // (automated suppression system) via FireManager.ExtinguishAllFires() above, which
+            // fires the same OnAllFiresExtinguished event as the small-fire manual-extinguish
+            // path. Don't let this handler's state jump take over here — the big-fire path has
+            // its own feedback modal and completion route (ProceedAfterActionFeedback ->
+            // StartMachineOriginInvestigation). Letting this handler run instead skipped straight
+            // to the "ALL FIRES SUPPRESSED" success modal and its scorecard button, ending the
+            // simulation before the forensic investigation stage ever ran.
+            if (_isActuallyBig && _state == FireResponseState.Stage3A_ActionChoice)
+            {
+                return;
+            }
+
             _state = FireResponseState.Extinguished;
-            _responseScore += 150; // Suppression completion bonus
+            // Note: the suppression completion bonus is scored separately by InvestigationManager
+            // (via wasSuppressed) — not added here too, or the total would double-count it.
 
             if (EvacuationManager.Instance != null)
             {
@@ -453,6 +455,10 @@ namespace ARMiningSimulator.Extinguisher
             _state = FireResponseState.Inactive;
             _responseScore = 0;
             _isShowingFeedback = false;
+            _sizeEvalScored = false;
+            _sizeEvalLockedScore = 0;
+            _actionChoiceScored = false;
+            _actionChoiceLockedScore = 0;
 
             if (ExtinguisherController.Instance != null)
             {

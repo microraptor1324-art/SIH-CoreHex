@@ -33,18 +33,26 @@ namespace ARMiningSimulator.UI
                 return;
             }
 
-            if (EvacuationManager.Instance.IsEvacuating)
+            TacticalUITheme.BeginScaledGUI();
+            try
             {
-                DrawEvacuationBanner();
-            }
-            else if (EvacuationManager.Instance.IsSafeZoneReached)
-            {
-                // Only show Safe Area arrival modal if Stage 3 has not yet begun
-                if (FireResponseManager.Instance == null ||
-                    FireResponseManager.Instance.State == FireResponseState.Inactive)
+                if (EvacuationManager.Instance.IsEvacuating)
                 {
-                    DrawSafeZoneArrivalModal();
+                    DrawEvacuationBanner();
                 }
+                else if (EvacuationManager.Instance.IsSafeZoneReached)
+                {
+                    // Only show Safe Area arrival modal if Stage 3 has not yet begun
+                    if (FireResponseManager.Instance == null ||
+                        FireResponseManager.Instance.State == FireResponseState.Inactive)
+                    {
+                        DrawSafeZoneArrivalModal();
+                    }
+                }
+            }
+            finally
+            {
+                TacticalUITheme.EndScaledGUI();
             }
         }
 
@@ -124,17 +132,17 @@ namespace ARMiningSimulator.UI
             float bx;
             float by;
 
-            if (Screen.width >= 960f)
+            if (TacticalUITheme.VW >= 960f)
             {
-                bannerWidth = Mathf.Min(450f, Screen.width - 560f);
-                bx = (Screen.width - bannerWidth) * 0.5f;
+                bannerWidth = Mathf.Min(450f, TacticalUITheme.VW - 560f);
+                bx = (TacticalUITheme.VW - bannerWidth) * 0.5f;
                 by = 16f;
             }
             else
             {
-                bannerWidth = Mathf.Min(450f, Screen.width - 32f);
-                bx = (Screen.width - bannerWidth) * 0.5f;
-                by = 86f;
+                bannerWidth = Mathf.Min(450f, TacticalUITheme.VW - 32f);
+                bx = (TacticalUITheme.VW - bannerWidth) * 0.5f;
+                by = TacticalUITheme.HudTopZoneClearY;
             }
 
             float bannerHeight = 94f;
@@ -184,29 +192,24 @@ namespace ARMiningSimulator.UI
 
         private void DrawSafeZoneArrivalModal()
         {
-            TacticalUITheme.DrawRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.04f, 0.05f, 0.09f, 0.90f));
+            TacticalUITheme.DrawRect(new Rect(0, 0, TacticalUITheme.VW, TacticalUITheme.VH), new Color(0.04f, 0.05f, 0.09f, 0.90f));
 
-            float modalWidth = Mathf.Min(560f, Screen.width - 32f);
+            float modalWidth = Mathf.Min(560f, TacticalUITheme.VW - 32f);
             float modalHeight = 350f;
-            float mx = (Screen.width - modalWidth) * 0.5f;
-            float my = (Screen.height - modalHeight) * 0.5f;
+            float mx = (TacticalUITheme.VW - modalWidth) * 0.5f;
+            float my = (TacticalUITheme.VH - modalHeight) * 0.5f;
             Rect modalRect = new Rect(mx, my, modalWidth, modalHeight);
 
-            TacticalUITheme.DrawFortniteCard(modalRect, TacticalUITheme.FortniteGreen, TacticalUITheme.FortniteNavyDark, "/// REFUGE REACHED ///", TacticalUITheme.FortniteGold);
+            // Card with no ribbon tag — kept plain per request.
+            TacticalUITheme.DrawFortniteCard(modalRect, TacticalUITheme.FortniteGreen, TacticalUITheme.FortniteNavyDark);
 
             GUI.Label(new Rect(mx, my + 22, modalWidth, 32), "🏆 SAFE ZONE REACHED! 🏆", _modalHeaderStyle);
-
-            float timeTaken = EvacuationManager.Instance.EvacuationTimer;
-            int bonus = EvacuationManager.Instance.SpeedBonusScore;
-            string rating = timeTaken < 10f ? "EXEMPLARY (MAX SPEED BONUS)" : (timeTaken < 20f ? "QUALIFIED" : "ACCEPTABLE");
 
             Rect statBox = new Rect(mx + 25, my + 64, modalWidth - 50, 150);
             TacticalUITheme.DrawFortniteCard(statBox, TacticalUITheme.BorderSubtle, TacticalUITheme.CardSlotBg);
 
-            string statsText = $"Drill Evacuation Time: {timeTaken:F1}s\n" +
-                               $"Speed Rating: {rating}\n" +
-                               $"Speed Bonus Earned: +{bonus} PTS\n\n" +
-                               "Trainee has successfully evacuated the active fire compartment into the designated fresh-air Safe Zone.";
+            // Short confirmation only, per request (no detailed timing/rating stats).
+            string statsText = "You have reached the safe zone.";
 
             GUI.Label(new Rect(statBox.x + 14, statBox.y + 14, statBox.width - 28, 122), statsText, _modalSubStyle);
 

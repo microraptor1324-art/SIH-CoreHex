@@ -418,6 +418,69 @@ namespace ARMiningSimulator.Fire
             marker.AddComponent<HazardBeaconPulsator>();
             return marker;
         }
+
+        /// <summary>
+        /// Tall, slow-rising smoke plume used purely as a findability clue during the fire-origin
+        /// identification stage — the flames/embers are already out at that point, but a machine
+        /// that caught fire keeps visibly smoldering so the trainee can spot it from across the
+        /// room instead of having to search every machine up close. Bigger, taller, and drifts
+        /// higher than the in-fire smoke so it reads clearly over other equipment at a distance.
+        /// </summary>
+        public static ParticleSystem BuildIdentificationSmoke(Transform parent)
+        {
+            InitMaterials();
+
+            GameObject smokeGo = new GameObject("IdentificationSmoke");
+            smokeGo.transform.SetParent(parent, false);
+            smokeGo.transform.localPosition = new Vector3(0, 0.4f, 0);
+
+            ParticleSystem ps = smokeGo.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.duration = 1.0f;
+            main.loop = true;
+            main.maxParticles = 40;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.playOnAwake = true;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(3.0f, 4.5f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.45f, 0.75f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.5f, 0.9f);
+            main.startColor = new Color(0.30f, 0.30f, 0.32f, 0.55f);
+
+            var emission = ps.emission;
+            emission.rateOverTime = 10f;
+
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 12f;
+            shape.radius = 0.22f;
+
+            var sizeOverLife = ps.sizeOverLifetime;
+            sizeOverLife.enabled = true;
+            AnimationCurve sizeCurve = new AnimationCurve();
+            sizeCurve.AddKey(0.0f, 0.4f);
+            sizeCurve.AddKey(1.0f, 2.6f);
+            sizeOverLife.size = new ParticleSystem.MinMaxCurve(1.0f, sizeCurve);
+
+            var colorOverLife = ps.colorOverLifetime;
+            colorOverLife.enabled = true;
+            Gradient grad = new Gradient();
+            grad.SetKeys(
+                new[] { new GradientColorKey(new Color(0.30f, 0.30f, 0.32f), 0f), new GradientColorKey(new Color(0.30f, 0.30f, 0.32f), 1f) },
+                new[] { new GradientAlphaKey(0.55f, 0f), new GradientAlphaKey(0.35f, 0.5f), new GradientAlphaKey(0f, 1f) });
+            colorOverLife.color = grad;
+
+            var noise = ps.noise;
+            noise.enabled = true;
+            noise.strength = 0.25f;
+            noise.frequency = 0.35f;
+
+            var renderer = ps.GetComponent<ParticleSystemRenderer>();
+            renderer.material = s_BlackSmokeMaterial;
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.sortingOrder = 1;
+
+            return ps;
+        }
     }
 
     /// <summary>

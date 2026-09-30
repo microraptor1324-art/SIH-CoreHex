@@ -27,6 +27,13 @@ namespace ARMiningSimulator.Decisions
         private float _stageTimer = 0f;
         private int _totalScore = 0;
 
+        // Each stage's score is locked in on the FIRST submission attempt only — without this,
+        // retrying after a wrong-but-positive-scored option (several options here award partial
+        // points even when isCorrect is false) would let a player repeatedly re-select it and farm
+        // unlimited score before finally picking the correct option to proceed.
+        private bool _currentStageScored = false;
+        private int _currentStageLockedScore = 0;
+
         private readonly List<DecisionRecord> _history = new List<DecisionRecord>();
 
         // Pre-configured questions
@@ -105,7 +112,15 @@ namespace ARMiningSimulator.Decisions
                 20f
             );
             _questionStage2.options.Add(new DecisionOption(
-                "Direct airflow outbye",
+                "Shut down all main ventilation fans immediately",
+                false,
+                50,
+                "PARTIAL (+50 PTS): Halting main fans stops fresh oxygen from feeding the fire seat, but causes lethal carbon monoxide (CO) and smoke to rapidly stagnate in the drift. Directing airflow outbye is the superior safety standard.",
+                1.1f,
+                1.8f
+            ));
+            _questionStage2.options.Add(new DecisionOption(
+                "Activate the ventilation system",
                 true,
                 100,
                 "CORRECT (+100 PTS)! Mining Safety Standard (MSHA/ISO): Direct airflow outbye to exhaust toxic smoke and combustion gases away from escape routes, keeping designated evacuation walkways clear of toxic fumes.",
@@ -120,44 +135,6 @@ namespace ARMiningSimulator.Decisions
                 1.5f,
                 1.4f
             ));
-            _questionStage2.options.Add(new DecisionOption(
-                "Shut down all main ventilation fans immediately",
-                false,
-                50,
-                "PARTIAL (+50 PTS): Halting main fans stops fresh oxygen from feeding the fire seat, but causes lethal carbon monoxide (CO) and smoke to rapidly stagnate in the drift. Directing airflow outbye is the superior safety standard.",
-                1.1f,
-                1.8f
-            ));
-        }
-
-        private string _lastOrderStage1 = "";
-        private string _lastFirstOptionStage1 = "";
-        private string _lastOrderStage2 = "";
-        private string _lastFirstOptionStage2 = "";
-
-        private void ShuffleOptions(List<DecisionOption> options, ref string lastOrder, ref string lastFirstOption)
-        {
-            if (options == null || options.Count <= 1) return;
-
-            for (int attempt = 0; attempt < 30; attempt++)
-            {
-                for (int i = options.Count - 1; i > 0; i--)
-                {
-                    int rand = UnityEngine.Random.Range(0, i + 1);
-                    var temp = options[i];
-                    options[i] = options[rand];
-                    options[rand] = temp;
-                }
-
-                string currentOrder = string.Join("|", options.ConvertAll(o => o.text));
-                if (currentOrder != lastOrder && options[0].text != lastFirstOption)
-                    break;
-                if (attempt > 20 && currentOrder != lastOrder)
-                    break;
-            }
-
-            lastOrder = string.Join("|", options.ConvertAll(o => o.text));
-            lastFirstOption = options[0].text;
         }
 
         private void HandleFireDetected(FireHazard hazard, float reactionTime)
@@ -170,11 +147,12 @@ namespace ARMiningSimulator.Decisions
         {
             _currentStage = DecisionStage.Stage1_Alarm;
             _currentQuestion = _questionStage1;
-            ShuffleOptions(_questionStage1.options, ref _lastOrderStage1, ref _lastFirstOptionStage1);
             _stageTimer = 0f;
             _isWaitingForSelection = true;
             _isShowingFeedback = false;
             _lastSelectedOption = null;
+            _currentStageScored = false;
+            _currentStageLockedScore = 0;
 
             Debug.Log($"[DecisionManager] 📋 Starting Decision Stage 1: Immediate Action (Raise Alarm).");
             OnQuestionPresented?.Invoke(_currentQuestion);
@@ -184,11 +162,12 @@ namespace ARMiningSimulator.Decisions
         {
             _currentStage = DecisionStage.Stage2_Ventilation;
             _currentQuestion = _questionStage2;
-            ShuffleOptions(_questionStage2.options, ref _lastOrderStage2, ref _lastFirstOptionStage2);
             _stageTimer = 0f;
             _isWaitingForSelection = true;
             _isShowingFeedback = false;
             _lastSelectedOption = null;
+            _currentStageScored = false;
+            _currentStageLockedScore = 0;
 
             Debug.Log($"[DecisionManager] 📋 Starting Decision Stage 2: Ventilation Management (Direct Airflow Outbye).");
             OnQuestionPresented?.Invoke(_currentQuestion);
@@ -211,14 +190,27 @@ namespace ARMiningSimulator.Decisions
             _isWaitingForSelection = false;
             _isShowingFeedback = true;
 
-            int earnedScore = _lastSelectedOption.scoreModifier;
-            // Quick-thinking bonus if answered within 8 seconds and correct
-            if (_lastSelectedOption.isCorrect && _stageTimer <= 8.0f)
+            // Score is locked in on the first submission attempt only — retrying after a wrong
+            // answer (the question re-opens automatically) never re-applies it, so a wrong-but-
+            // partial-credit option can't be farmed by repeatedly re-selecting it.
+            int earnedScore;
+            if (!_currentStageScored)
             {
-                earnedScore += 25;
-            }
+                earnedScore = _lastSelectedOption.scoreModifier;
+                // Quick-thinking bonus if answered within 8 seconds and correct
+                if (_lastSelectedOption.isCorrect && _stageTimer <= 8.0f)
+                {
+                    earnedScore += 25;
+                }
 
-            _totalScore += earnedScore;
+                _totalScore += earnedScore;
+                _currentStageScored = true;
+                _currentStageLockedScore = earnedScore;
+            }
+            else
+            {
+                earnedScore = _currentStageLockedScore;
+            }
 
             var record = new DecisionRecord
             {
@@ -271,7 +263,6 @@ namespace ARMiningSimulator.Decisions
                 else
                 {
                     // Re-open question modal so trainee can select the mandatory life-saving action
-                    ShuffleOptions(_questionStage1.options, ref _lastOrderStage1, ref _lastFirstOptionStage1);
                     _isWaitingForSelection = true;
                 }
             }
@@ -285,8 +276,7 @@ namespace ARMiningSimulator.Decisions
                 }
                 else
                 {
-                    // Re-open question modal so trainee can select the correct ventilation protocol (reshuffled)
-                    ShuffleOptions(_questionStage2.options, ref _lastOrderStage2, ref _lastFirstOptionStage2);
+                    // Re-open question modal so trainee can select the correct ventilation protocol
                     _isWaitingForSelection = true;
                 }
             }
@@ -306,11 +296,9 @@ namespace ARMiningSimulator.Decisions
             _isShowingFeedback = false;
             _stageTimer = 0f;
             _totalScore = 0;
+            _currentStageScored = false;
+            _currentStageLockedScore = 0;
             _history.Clear();
-            _lastOrderStage1 = "";
-            _lastFirstOptionStage1 = "";
-            _lastOrderStage2 = "";
-            _lastFirstOptionStage2 = "";
 
             if (EmergencyAlarmBeacon.Instance != null)
             {

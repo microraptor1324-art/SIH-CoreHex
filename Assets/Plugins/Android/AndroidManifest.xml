@@ -24,6 +24,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- SURAKSHA-AR dashboard deep link: surakshaar://launch?scenario=underground-fire -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="surakshaar" android:host="launch" />
+            </intent-filter>
+
             <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
         </activity>
     </application>

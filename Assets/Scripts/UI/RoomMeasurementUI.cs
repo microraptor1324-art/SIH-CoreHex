@@ -34,9 +34,7 @@ namespace ARMiningSimulator.UI
         // Debug Panel Toggle (Requirement 23) - Clean default (hidden)
         private bool _showDebugPanel = false;
 
-        // Custom cached textures & styles for clean, modern aesthetic
-        private Texture2D _panelTex;
-        private Texture2D _pillTex;
+        // Cached styles for clean, modern aesthetic
         private GUIStyle _topTitleStyle;
         private GUIStyle _instructionStyle;
         private GUIStyle _subMetaStyle;
@@ -139,9 +137,6 @@ namespace ARMiningSimulator.UI
         {
             if (_stylesInitialized) return;
 
-            _panelTex = MakeColorTex(new Color(0.06f, 0.08f, 0.12f, 0.90f));
-            _pillTex = MakeColorTex(new Color(0.04f, 0.06f, 0.09f, 0.92f));
-
             _topTitleStyle = new GUIStyle(GUI.skin.label)
             {
                 fontSize = 17,
@@ -177,16 +172,19 @@ namespace ARMiningSimulator.UI
 
             _mainBtnStyle = new GUIStyle(GUI.skin.button)
             {
-                fontSize = 19,
+                fontSize = 17,
                 fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter
+                alignment = TextAnchor.MiddleCenter,
+                wordWrap = true,
+                normal = { textColor = Color.white }
             };
 
             _subBtnStyle = new GUIStyle(GUI.skin.button)
             {
-                fontSize = 15,
+                fontSize = 14,
                 fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white }
             };
 
             _confirmedActiveStyle = new GUIStyle(GUI.skin.label)
@@ -209,7 +207,8 @@ namespace ARMiningSimulator.UI
             {
                 fontSize = 13,
                 fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white }
             };
 
             _dbgToggleBtnStyle = new GUIStyle(GUI.skin.button)
@@ -223,43 +222,17 @@ namespace ARMiningSimulator.UI
             _stylesInitialized = true;
         }
 
-        private Texture2D MakeColorTex(Color col)
-        {
-            var tex = new Texture2D(1, 1);
-            tex.SetPixel(0, 0, col);
-            tex.Apply();
-            return tex;
-        }
-
-        private void OnDestroy()
-        {
-            if (_panelTex != null) Destroy(_panelTex);
-            if (_pillTex != null) Destroy(_pillTex);
-        }
-
+        /// <summary>Rounded, soft-shadowed card panel — routes through the shared tactical theme.</summary>
         private void DrawPanelBox(Rect r)
         {
-            if (_panelTex != null) GUI.DrawTexture(r, _panelTex);
-            // 1px sleek border
-            Color oldCol = GUI.color;
-            GUI.color = new Color(0.20f, 0.28f, 0.40f, 0.70f);
-            GUI.DrawTexture(new Rect(r.x, r.y, r.width, 1), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(r.x, r.yMax - 1, r.width, 1), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(r.x, r.y, 1, r.height), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(r.xMax - 1, r.y, 1, r.height), Texture2D.whiteTexture);
-            GUI.color = oldCol;
+            TacticalUITheme.DrawFortniteCard(r, TacticalUITheme.FortniteBlue, TacticalUITheme.FortniteNavyDark);
         }
 
+        /// <summary>Rounded capsule status pill, e.g. the reticle status readout.</summary>
         private void DrawPillBadge(Rect r, Color textColor, string text)
         {
-            if (_pillTex != null) GUI.DrawTexture(r, _pillTex);
-            Color oldCol = GUI.color;
-            GUI.color = new Color(textColor.r, textColor.g, textColor.b, 0.55f);
-            GUI.DrawTexture(new Rect(r.x, r.y, r.width, 1), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(r.x, r.yMax - 1, r.width, 1), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(r.x, r.y, 1, r.height), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(r.xMax - 1, r.y, 1, r.height), Texture2D.whiteTexture);
-            GUI.color = oldCol;
+            TacticalUITheme.DrawRoundedRect(new Rect(r.x, r.y + 2f, r.width, r.height), new Color(0f, 0f, 0f, 0.20f), true);
+            TacticalUITheme.DrawRoundedRect(r, TacticalUITheme.FortniteNavyDark, true);
 
             GUIStyle badgeLabel = new GUIStyle(GUI.skin.label)
             {
@@ -281,8 +254,23 @@ namespace ARMiningSimulator.UI
 
             InitStyles();
 
-            int screenW = Screen.width;
-            int screenH = Screen.height;
+            TacticalUITheme.BeginScaledGUI();
+            try
+            {
+                DrawOnGUIContent();
+            }
+            finally
+            {
+                TacticalUITheme.EndScaledGUI();
+            }
+        }
+
+        private void DrawOnGUIContent()
+        {
+            if (DashboardScreen.IsShowing) return;
+
+            int screenW = Mathf.RoundToInt(TacticalUITheme.VW);
+            int screenH = Mathf.RoundToInt(TacticalUITheme.VH);
 
             // When measurement is confirmed and mine environment is active, show clean minimal re-scan bar
             if (_measurement != null && _measurement.IsConfirmed)
@@ -422,8 +410,8 @@ namespace ARMiningSimulator.UI
             bool isClosed = _measurement != null && _measurement.IsRoomClosed;
             float cardW = Mathf.Min(screenW - 32f, 520f);
             float cardX = (screenW - cardW) * 0.5f;
-            float cardH = isClosed ? 116f : 96f;
-            float cardY = 18f;
+            float cardH = isClosed ? 120f : 100f;
+            float cardY = 20f;
 
             DrawPanelBox(new Rect(cardX, cardY, cardW, cardH));
 
@@ -485,93 +473,87 @@ namespace ARMiningSimulator.UI
             float deckW = Mathf.Min(screenW - 32f, 500f);
             float deckX = (screenW - deckW) * 0.5f;
 
-            int btnH = 54;
-            int subBtnH = 42;
-            int spacing = 8;
-            int pad = 12;
-
-            int deckH = pad * 2 + btnH + spacing + subBtnH;
-            float deckY = screenH - deckH - 20f;
-
-            DrawPanelBox(new Rect(deckX, deckY, deckW, deckH));
-
-            GUILayout.BeginArea(new Rect(deckX + pad, deckY + pad, deckW - (pad * 2), deckH - (pad * 2)));
+            float subBtnH = 46f;
+            float spacing = 12f;
+            float pad = 16f;
 
             bool isClosed = _measurement != null && _measurement.IsRoomClosed;
             int flags = _measurement != null ? _measurement.FlagCount : 0;
 
-            // ==========================================================
-            // ROW 1: PRIMARY ACTION BUTTON (PLACE FLAG / CLOSE / GENERATE)
-            // ==========================================================
+            // Decide which main-button state applies first, so its (possibly long, e.g. the area
+            // readout) label can be measured before the deck is laid out — never a fixed 56px guess.
+            string mainBtnText;
+            Color mainBtnCol;
+            bool mainBtnEnabled = true;
+            System.Action mainBtnAction;
             if (isClosed)
             {
-                GUI.backgroundColor = new Color(0.15f, 0.85f, 0.42f); // Emerald Safety Green
-                if (GUILayout.Button($"⛏️ GENERATE MINE ENVIRONMENT ({_measurement.Area:F2} m²)", _mainBtnStyle, GUILayout.Height(btnH)))
-                {
-                    OnConfirmClicked();
-                }
+                mainBtnText = $"⛏️ GENERATE MINE ENVIRONMENT ({_measurement.Area:F2} m²)";
+                mainBtnCol = TacticalUITheme.FortniteGreen;
+                mainBtnAction = OnConfirmClicked;
             }
             else if (flags == 4)
             {
-                GUI.backgroundColor = new Color(0.12f, 0.60f, 1.0f); // Vibrant AR Blue
-                if (GUILayout.Button("📐 CLOSE ROOM & SURVEY AREA", _mainBtnStyle, GUILayout.Height(btnH)))
-                {
-                    OnCloseRoomClicked();
-                }
+                mainBtnText = "📐 CLOSE ROOM & SURVEY AREA";
+                mainBtnCol = TacticalUITheme.FortniteBlue;
+                mainBtnAction = OnCloseRoomClicked;
             }
             else
             {
                 bool canAdd = _measurement != null && _measurement.CanAddFlag;
-                string addFlagText = canAdd 
-                    ? $"🚩 PLACE FLAG  ({flags + 1}/4)" 
+                mainBtnText = canAdd
+                    ? $"🚩 PLACE FLAG  ({flags + 1}/4)"
                     : "🔍 POINT AT FLOOR TO CALIBRATE";
-
-                GUI.backgroundColor = canAdd 
-                    ? new Color(0.08f, 0.68f, 0.95f) // High-visibility AR Cyan
-                    : new Color(0.38f, 0.44f, 0.52f); // Muted slate
-
-                GUI.enabled = canAdd;
-                if (GUILayout.Button(addFlagText, _mainBtnStyle, GUILayout.Height(btnH)))
-                {
-                    OnAddFlagClicked();
-                }
-                GUI.enabled = true;
+                mainBtnCol = canAdd ? TacticalUITheme.FortniteBlue : new Color(0.40f, 0.45f, 0.52f);
+                mainBtnEnabled = canAdd;
+                mainBtnAction = OnAddFlagClicked;
             }
 
-            GUI.backgroundColor = Color.white;
-            GUILayout.Space(spacing);
+            float innerWForMeasure = deckW - pad * 2f;
+            float btnH = Mathf.Max(TacticalUITheme.CalcTextHeight(_mainBtnStyle, mainBtnText, innerWForMeasure - _mainBtnStyle.padding.horizontal) + _mainBtnStyle.padding.vertical, 56f);
+
+            float deckH = pad * 2f + btnH + spacing + subBtnH;
+            float deckY = screenH - deckH - 24f;
+
+            DrawPanelBox(new Rect(deckX, deckY, deckW, deckH));
+
+            float innerX = deckX + pad;
+            float innerW = deckW - pad * 2f;
+            float y = deckY + pad;
+
+            // ==========================================================
+            // ROW 1: PRIMARY ACTION BUTTON (PLACE FLAG / CLOSE / GENERATE)
+            // ==========================================================
+            Rect mainBtnRect = new Rect(innerX, y, innerW, btnH);
+
+            GUI.enabled = mainBtnEnabled;
+            if (TacticalUITheme.DrawFortniteButton(mainBtnRect, mainBtnText, mainBtnCol, _mainBtnStyle) && mainBtnEnabled)
+            {
+                mainBtnAction?.Invoke();
+            }
+            GUI.enabled = true;
+
+            y += btnH + spacing;
 
             // ==========================================================
             // ROW 2: CENTERED SECONDARY CONTROLS (UNDO, RESET)
             // ==========================================================
-            GUILayout.BeginHorizontal();
+            float halfW = (innerW - spacing) * 0.5f;
 
-            float halfW = (deckW - (pad * 2) - spacing) * 0.5f;
-
-            // 1. UNDO BUTTON
             bool canUndo = flags > 0 && !isClosed;
+            Rect undoRect = new Rect(innerX, y, halfW, subBtnH);
             GUI.enabled = canUndo;
-            GUI.backgroundColor = canUndo ? new Color(0.20f, 0.28f, 0.38f) : new Color(0.12f, 0.16f, 0.22f);
-            if (GUILayout.Button("↩ UNDO", _subBtnStyle, GUILayout.Height(subBtnH), GUILayout.Width(halfW)))
+            if (TacticalUITheme.DrawFortniteButton(undoRect, "↩ UNDO", TacticalUITheme.FortniteNavyLight, _subBtnStyle) && canUndo)
             {
                 OnUndoClicked();
             }
             GUI.enabled = true;
 
-            GUILayout.Space(spacing);
-
-            // 2. RESET BUTTON
-            GUI.backgroundColor = new Color(0.28f, 0.18f, 0.22f); // Subtle red-tinted dark button for reset
-            if (GUILayout.Button("🔄 RESET", _subBtnStyle, GUILayout.Height(subBtnH), GUILayout.Width(halfW)))
+            Rect resetRect = new Rect(innerX + halfW + spacing, y, halfW, subBtnH);
+            if (TacticalUITheme.DrawFortniteButton(resetRect, "🔄 RESET", TacticalUITheme.FortniteRed, _subBtnStyle))
             {
                 OnResetClicked();
             }
-
-            GUI.backgroundColor = Color.white;
-
-            GUILayout.EndHorizontal();
-
-            GUILayout.EndArea();
         }
 
         private void DrawConfirmedOverlay(int screenW, int screenH)
@@ -600,23 +582,19 @@ namespace ARMiningSimulator.UI
 
             DrawPanelBox(new Rect(barX, barY, barW, barH));
 
-            GUILayout.BeginArea(new Rect(barX + 16, barY + 8, barW - 32, barH - 16));
-            GUILayout.BeginHorizontal();
-
             float area = _measurement != null ? _measurement.Area : 0f;
+            float rescanW = 110f;
+            float rescanRectX = barX + barW - 16f - rescanW;
 
             if (isEquipmentPending)
             {
-                GUILayout.Label($"⛏️ MINE BUILT  •  EQUIPMENT IN {envGen.RemainingEquipmentDelay:F1}s", _pendingStyle);
-                GUILayout.FlexibleSpace();
+                GUI.Label(new Rect(barX + 18, barY, barW - 40 - rescanW - 130f - 16f, barH), $"⛏️ MINE BUILT  •  EQUIPMENT IN {envGen.RemainingEquipmentDelay:F1}s", _pendingStyle);
 
-                GUI.backgroundColor = new Color(0.15f, 0.65f, 0.95f);
-                if (GUILayout.Button("⚡ DEPLOY NOW", _overlayBtnStyle, GUILayout.Width(130), GUILayout.Height(36)))
+                Rect deployRect = new Rect(rescanRectX - 130f - 8f, barY + 8f, 130f, 36f);
+                if (TacticalUITheme.DrawFortniteButton(deployRect, "⚡ DEPLOY NOW", TacticalUITheme.FortniteBlue, _overlayBtnStyle))
                 {
                     envGen.DeployEquipmentNow();
                 }
-                GUI.backgroundColor = Color.white;
-                GUILayout.Space(8);
             }
             else
             {
@@ -625,19 +603,14 @@ namespace ARMiningSimulator.UI
                 string statusText = envGen != null && envGen.IsEquipmentSpawned
                     ? $"⛏️ MINE & EQUIPMENT ACTIVE ({machines}M | {elec}E)"
                     : $"⛏️ UNDERGROUND MINE ({area:F2} m²)";
-                GUILayout.Label(statusText, _confirmedActiveStyle);
-                GUILayout.FlexibleSpace();
+                GUI.Label(new Rect(barX + 18, barY, barW - 36 - rescanW, barH), statusText, _confirmedActiveStyle);
             }
 
-            GUI.backgroundColor = new Color(0.24f, 0.30f, 0.40f);
-            if (GUILayout.Button("🔄 RE-SCAN", _overlayBtnStyle, GUILayout.Width(110), GUILayout.Height(36)))
+            Rect rescanRect = new Rect(rescanRectX, barY + 8f, rescanW, 36f);
+            if (TacticalUITheme.DrawFortniteButton(rescanRect, "🔄 RE-SCAN", TacticalUITheme.FortniteNavyLight, _overlayBtnStyle))
             {
                 OnResetClicked();
             }
-            GUI.backgroundColor = Color.white;
-
-            GUILayout.EndHorizontal();
-            GUILayout.EndArea();
 
             // If MiningEnvironmentUI is NOT present in the scene, draw the center-bottom Start Training Deck here
             var miningUI = FindFirstObjectByType<MiningEnvironmentUI>();
@@ -650,34 +623,27 @@ namespace ARMiningSimulator.UI
 
                 DrawPanelBox(new Rect(deckX, deckY, deckW, deckH));
 
-                GUILayout.BeginArea(new Rect(deckX + 12, deckY + 10, deckW - 24, deckH - 20));
+                float innerX2 = deckX + 14f;
+                float innerW2 = deckW - 28f;
+                float y2 = deckY + 12f;
 
-                GUI.backgroundColor = new Color(0.12f, 0.85f, 0.42f); // Emerald Safety Green
-                if (GUILayout.Button("🚨 START TRAINING DRILL", _mainBtnStyle, GUILayout.Height(50)))
+                if (TacticalUITheme.DrawFortniteButton(new Rect(innerX2, y2, innerW2, 50f), "🚨 START TRAINING DRILL", TacticalUITheme.FortniteGreen, _mainBtnStyle))
                 {
                     StartTrainingFromMeasurementUI();
                 }
 
-                GUILayout.Space(6);
+                y2 += 50f + 8f;
+                float half2 = (innerW2 - 8f) * 0.5f;
 
-                GUILayout.BeginHorizontal();
-                GUI.backgroundColor = new Color(0.20f, 0.28f, 0.38f);
-                if (GUILayout.Button("🔀 RE-ROLL LAYOUT", _subBtnStyle, GUILayout.Height(30)))
+                if (TacticalUITheme.DrawFortniteButton(new Rect(innerX2, y2, half2, 32f), "🔀 RE-ROLL LAYOUT", TacticalUITheme.FortniteNavyLight, _subBtnStyle))
                 {
                     if (envGen != null) envGen.Regenerate();
                 }
 
-                GUILayout.Space(8);
-
-                GUI.backgroundColor = new Color(0.28f, 0.18f, 0.22f);
-                if (GUILayout.Button("🔄 RE-SCAN ROOM", _subBtnStyle, GUILayout.Height(30)))
+                if (TacticalUITheme.DrawFortniteButton(new Rect(innerX2 + half2 + 8f, y2, half2, 32f), "🔄 RE-SCAN ROOM", TacticalUITheme.FortniteRed, _subBtnStyle))
                 {
                     OnResetClicked();
                 }
-                GUILayout.EndHorizontal();
-
-                GUI.backgroundColor = Color.white;
-                GUILayout.EndArea();
             }
         }
 

@@ -54,6 +54,8 @@ namespace ARMiningSimulator.Fire
         public float DamageRadius => _config != null ? _config.damageRadius : 2.0f;
         public bool IsExtinguishable => _config != null ? _config.isExtinguishable : true;
         public float ElapsedBurningTime => _elapsedBurningTime;
+        public const float MaxExtinguishHealth = 100f;
+        public float ExtinguishProgress => Mathf.Clamp01(1f - _extinguishHealth / MaxExtinguishHealth);
 
         private void Awake()
         {
@@ -266,8 +268,38 @@ namespace ARMiningSimulator.Fire
             if (_flameMesh != null) _flameMesh.SetActive(false);
             if (_hazardMarker != null) _hazardMarker.SetActive(false);
 
+            ApplyBurntLook();
+
             OnExtinguished?.Invoke();
             Debug.Log($"[FireHazard] Fire on '{(_fireSource != null ? _fireSource.name : name)}' successfully EXTINGUISHED!");
+        }
+
+        /// <summary>
+        /// Gives the machine that caught fire a charred, greyish look once its fire is put out, so
+        /// the trainee can visually identify the origin machine during the tap-identification stage.
+        /// Darkens every renderer's material color toward sooty grey and flattens shininess for a
+        /// matte burnt finish. Accessing Renderer.materials (plural) instantiates a per-renderer
+        /// copy the first time it's touched, so this never affects the shared procedural material
+        /// still used by every other (unburned) machine.
+        /// </summary>
+        private void ApplyBurntLook()
+        {
+            GameObject target = _fireSource != null ? _fireSource : gameObject;
+            var renderers = target.GetComponentsInChildren<Renderer>();
+            Color burntColor = new Color(0.14f, 0.13f, 0.12f);
+
+            foreach (var rend in renderers)
+            {
+                var mats = rend.materials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    mats[i].color = Color.Lerp(mats[i].color, burntColor, 0.85f);
+                    if (mats[i].HasProperty("_Metallic")) mats[i].SetFloat("_Metallic", 0f);
+                    if (mats[i].HasProperty("_Smoothness")) mats[i].SetFloat("_Smoothness", 0.08f);
+                    else if (mats[i].HasProperty("_Glossiness")) mats[i].SetFloat("_Glossiness", 0.08f);
+                }
+                rend.materials = mats;
+            }
         }
     }
 }

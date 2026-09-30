@@ -41,6 +41,7 @@ namespace ARMiningSimulator.Fire
         private readonly List<FireHazard> _activeFires = new List<FireHazard>();
         private bool _isScenarioActive = false;
         private float _scenarioTimer = 0f;
+        private bool _isGrowthFrozen = false;
         private string _activeScenarioTitle = "Underground Incident";
         private FireSeverity _lastNotifiedSeverity = FireSeverity.Small;
 
@@ -58,10 +59,19 @@ namespace ARMiningSimulator.Fire
         public float ScenarioTimer => _scenarioTimer;
         public string ActiveScenarioTitle => _activeScenarioTitle;
         public FireSpreadSystem SpreadSystem => _spreadSystem;
-        public float FireGrowthTime => _spreadSystem != null ? _spreadSystem.FireGrowthTime : 60.0f;
-        public bool IsSmallPhase => _scenarioTimer < FireGrowthTime;
-        public float RemainingSmallTime => Mathf.Max(0f, FireGrowthTime - _scenarioTimer);
-        public bool IsBigPhase => _scenarioTimer >= FireGrowthTime;
+        public bool IsGrowthFrozen => _isGrowthFrozen;
+
+        /// <summary>
+        /// Locks the fire at its current size. Called once the trainee reaches the Safe Area
+        /// and the fire size has been assessed, so a small fire cannot turn big while the
+        /// trainee is working through Decision 3 and the P.A.S.S. discharge.
+        /// </summary>
+        public void FreezeGrowth()
+        {
+            if (_isGrowthFrozen) return;
+            _isGrowthFrozen = true;
+            Debug.Log($"[FireManager] ⏸ Fire growth frozen at {_scenarioTimer:F1}s ({GetHighestSeverity()}).");
+        }
 
         private void Awake()
         {
@@ -104,9 +114,9 @@ namespace ARMiningSimulator.Fire
         {
             if (!_isScenarioActive) return;
 
-            _scenarioTimer += Time.deltaTime;
+            if (!_isGrowthFrozen) _scenarioTimer += Time.deltaTime;
 
-            if (_spreadSystem != null && _activeFires.Count > 0)
+            if (!_isGrowthFrozen && _spreadSystem != null && _activeFires.Count > 0)
             {
                 _spreadSystem.UpdateFires(_activeFires);
 
@@ -133,7 +143,6 @@ namespace ARMiningSimulator.Fire
             CancelInvoke(nameof(StartScenarioFires));
             ClearAllFires();
 
-            // Fire always starts as an incipient Small fire and remains small for at least 1 full minute (60 seconds)
             _scenarioSeverity = FireSeverity.Small;
             _lastNotifiedSeverity = FireSeverity.Small;
             _scenarioTimer = 0f;
@@ -141,8 +150,6 @@ namespace ARMiningSimulator.Fire
             if (_spreadSystem != null)
             {
                 _spreadSystem.TimeMultiplier = 1.0f;
-                _spreadSystem.SmallToMediumTime = Mathf.Max(60.0f, _spreadSystem.SmallToMediumTime);
-                _spreadSystem.MediumToLargeTime = Mathf.Max(60.0f, _spreadSystem.MediumToLargeTime);
             }
 
             if (_equipmentSpawner == null)
@@ -330,6 +337,13 @@ namespace ARMiningSimulator.Fire
             _isScenarioActive = true;
             _scenarioTimer = 0f;
             _lastNotifiedSeverity = FireSeverity.Small;
+
+            // Fire size is decided once, randomly (50/50 small vs big), right at ignition —
+            // no more growing from small to big over a fixed 60s timer. Freezing growth
+            // immediately locks it there so FireSpreadSystem's timer-based escalation never runs.
+            bool startAsBig = UnityEngine.Random.value < 0.5f;
+            SetAllFiresSeverity(startAsBig ? FireSeverity.Large : FireSeverity.Small);
+            FreezeGrowth();
 
             Debug.Log($"[FireManager] 🔥 {_activeScenarioTitle} started! Target: {primaryTarget?.name} | Total active fires: {_activeFires.Count}");
             OnFiresStarted?.Invoke(_activeFires);
@@ -670,6 +684,7 @@ namespace ARMiningSimulator.Fire
             }
             _activeFires.Clear();
             _isScenarioActive = false;
+            _isGrowthFrozen = false;
             _scenarioTimer = 0f;
         }
 

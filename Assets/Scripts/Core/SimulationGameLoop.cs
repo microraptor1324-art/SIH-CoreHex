@@ -154,7 +154,7 @@ namespace ARMiningSimulator.Core
             // Transitioning to incident investigation
         }
 
-        private void HandleInvestigationStarted(IncidentReport report)
+        private void HandleInvestigationStarted()
         {
             SetStage(SimulationStage.Investigation);
         }

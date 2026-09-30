@@ -156,6 +156,7 @@ namespace ARMiningSimulator.Environment
 
                 var machineComp = machineGo.AddComponent<MiningMachine>();
                 machineComp.Initialize(i + 1, mType, mName, 0.70f);
+                EnsureTapCollider(machineGo);
                 _spawnedMachines.Add(machineComp);
                 _occupiedPositions.Add(spawnPos);
 
@@ -343,6 +344,7 @@ namespace ARMiningSimulator.Environment
 
                 var elecComp = elecGo.AddComponent<ElectricalEquipment>();
                 elecComp.Initialize(i + 1, eType, eName, 0.50f);
+                EnsureTapCollider(elecGo);
                 _spawnedElectrical.Add(elecComp);
                 _occupiedPositions.Add(spawnPos);
 
@@ -445,6 +447,33 @@ namespace ARMiningSimulator.Environment
 
             Vector3 closestPoint = lineStart + dir * proj;
             return Vector3.Distance(point, closestPoint);
+        }
+
+        /// <summary>
+        /// Procedural machine/equipment visuals are built from primitives whose own colliders are
+        /// stripped after assembly (see ProceduralModelBuilder.StripColliders), so the root object
+        /// has no collider at all by default. Adds one BoxCollider encapsulating every renderer in
+        /// the hierarchy so the machine can be raycast-hit for tap/click identification (see
+        /// FireOriginTapDetector) — required for the fire-origin identification interaction.
+        /// </summary>
+        private static void EnsureTapCollider(GameObject go)
+        {
+            if (go == null || go.GetComponentInChildren<Collider>() != null) return;
+
+            var renderers = go.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return;
+
+            Bounds worldBounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++) worldBounds.Encapsulate(renderers[i].bounds);
+
+            var col = go.AddComponent<BoxCollider>();
+            col.center = go.transform.InverseTransformPoint(worldBounds.center);
+
+            Vector3 scale = go.transform.lossyScale;
+            col.size = new Vector3(
+                Mathf.Approximately(scale.x, 0f) ? worldBounds.size.x : worldBounds.size.x / scale.x,
+                Mathf.Approximately(scale.y, 0f) ? worldBounds.size.y : worldBounds.size.y / scale.y,
+                Mathf.Approximately(scale.z, 0f) ? worldBounds.size.z : worldBounds.size.z / scale.z);
         }
 
         private IEnumerator Co_PopInAnimation(GameObject obj, float duration = 0.40f)

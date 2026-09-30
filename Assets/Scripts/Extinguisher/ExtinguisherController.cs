@@ -24,6 +24,12 @@ namespace ARMiningSimulator.Extinguisher
         [Header("References")]
         [SerializeField] private Camera _traineeCamera;
 
+        [Header("Suppression Tuning")]
+        [Tooltip("Seconds of continuous on-target discharge needed to fully extinguish a small fire")]
+        [SerializeField] private float _secondsToExtinguish = 7f;
+        [Tooltip("Half-angle of the aim cone (degrees) around the camera forward that counts as on-target")]
+        [SerializeField] private float _aimConeHalfAngle = 30f;
+
         // Viewmodel runtime references
         private GameObject _extinguisherViewmodel;
         private ParticleSystem _sprayParticles;
@@ -48,6 +54,11 @@ namespace ARMiningSimulator.Extinguisher
         public bool IsDischarging => _isDischarging;
         public float RemainingCharge => _remainingCharge;
         public ExtinguisherConfig ActiveConfig => _activeConfig;
+
+        // Aim state (refreshed every frame while equipped, used by the HUD)
+        public FireHazard AimedFire { get; private set; }
+        public bool IsFireInRange { get; private set; }
+        public float SecondsToExtinguish => _secondsToExtinguish;
 
         private void Awake()
         {
@@ -109,6 +120,8 @@ namespace ARMiningSimulator.Extinguisher
         private void Update()
         {
             if (!_isEquipped) return;
+
+            UpdateAim();
 
             bool wantsDischarge = CheckInput();
 
@@ -180,53 +193,69 @@ namespace ARMiningSimulator.Extinguisher
                 return;
             }
 
-            // 2. Perform conical suppression check
-            if (_traineeCamera == null) return;
+            // 2. Apply suppression to the fire inside the aim cone and within nozzle range.
+            // Aim is resolved geometrically (not via physics) because the fire's collider is a
+            // trigger and the procedural machines may have no colliders at all.
+            FireHazard hazard = AimedFire;
+            if (hazard == null || !IsFireInRange || !hazard.IsIgnited) return;
 
-            Vector3 sprayOrigin = _nozzleTip != null ? _nozzleTip.position : _traineeCamera.transform.position;
-            Vector3 sprayDir = _traineeCamera.transform.forward;
-            float maxRange = _activeConfig != null ? _activeConfig.effectiveRange : 3.5f;
+            float suppressionAmount = FireHazard.MaxExtinguishHealth / Mathf.Max(0.1f, _secondsToExtinguish) * Time.deltaTime;
 
-            // SphereCast along forward aim vector
-            RaycastHit[] hits = Physics.SphereCastAll(sprayOrigin, 0.45f, sprayDir, maxRange, ~0, QueryTriggerInteraction.Ignore);
-            if (hits == null || hits.Length == 0) return;
-
-            float suppressionAmount = (_activeConfig != null ? _activeConfig.suppressionRate : 35f) * Time.deltaTime;
-
-            foreach (var hit in hits)
+            // Check electrical shock hazard
+            if (_activeConfig != null && _activeConfig.isHazardousOnElectrical)
             {
-                FireHazard hazard = hit.collider.GetComponentInParent<FireHazard>();
-                if (hazard == null) hazard = hit.collider.GetComponentInChildren<FireHazard>();
-
-                if (hazard != null && hazard.IsIgnited)
+                var elec = hazard.GetComponentInParent<ARMiningSimulator.Environment.ElectricalEquipment>();
+                if (elec != null)
                 {
-                    // Check electrical shock hazard
-                    if (_activeConfig != null && _activeConfig.isHazardousOnElectrical)
-                    {
-                        var elec = hazard.GetComponentInParent<ARMiningSimulator.Environment.ElectricalEquipment>();
-                        if (elec != null)
-                        {
-                            // Electrical electrocution damage!
-                            TraineeHealth.Instance?.ApplyDamage(40f * Time.deltaTime, "ELECTROCUTION HAZARD: Conductive Water/Foam on Live Electrical Panel!");
-                        }
-                    }
-
-                    // Apply suppression
-                    hazard.Extinguish(suppressionAmount);
-
-                    // If fire is Big (>60s / 1 minute), it is not extinguishable by portable canister
-                    if (!hazard.IsExtinguishable)
-                    {
-                        TraineeHealth.Instance?.ApplyDamage(15f * Time.deltaTime, "INTENSE RADIANT HEAT: Big fire cannot be fought! Retreat to Safety Area!");
-                    }
-
-                    if (!hazard.IsIgnited)
-                    {
-                        Debug.Log($"[ExtinguisherController] 🔥 Fire suppressed on {hazard.TargetName}!");
-                        OnSingleFireExtinguished?.Invoke(hazard);
-                        CheckAllFiresCleared();
-                    }
+                    // Electrical electrocution damage!
+                    TraineeHealth.Instance?.ApplyDamage(40f * Time.deltaTime, "ELECTROCUTION HAZARD: Conductive Water/Foam on Live Electrical Panel!");
                 }
+            }
+
+            // Apply suppression
+            hazard.Extinguish(suppressionAmount);
+
+            // If fire is Big (>60s / 1 minute), it is not extinguishable by portable canister
+            if (!hazard.IsExtinguishable)
+            {
+                TraineeHealth.Instance?.ApplyDamage(15f * Time.deltaTime, "INTENSE RADIANT HEAT: Big fire cannot be fought! Retreat to Safety Area!");
+            }
+
+            if (!hazard.IsIgnited)
+            {
+                Debug.Log($"[ExtinguisherController] 🔥 Fire suppressed on {hazard.TargetName}!");
+                OnSingleFireExtinguished?.Invoke(hazard);
+                CheckAllFiresCleared();
+            }
+        }
+
+        /// <summary>
+        /// Picks the burning fire closest to the camera's aim direction (within the aim cone)
+        /// and records whether it is inside the active extinguisher's effective range.
+        /// </summary>
+        private void UpdateAim()
+        {
+            AimedFire = null;
+            IsFireInRange = false;
+
+            if (_traineeCamera == null || FireManager.Instance == null) return;
+
+            Vector3 camPos = _traineeCamera.transform.position;
+            Vector3 camFwd = _traineeCamera.transform.forward;
+            float maxRange = _activeConfig != null ? _activeConfig.effectiveRange : 3.5f;
+            float bestAngle = _aimConeHalfAngle;
+
+            foreach (var fire in FireManager.Instance.ActiveFires)
+            {
+                if (fire == null || !fire.IsIgnited) continue;
+
+                Vector3 toFire = fire.transform.position - camPos;
+                float angle = Vector3.Angle(camFwd, toFire);
+                if (angle > bestAngle) continue;
+
+                bestAngle = angle;
+                AimedFire = fire;
+                IsFireInRange = toFire.magnitude <= maxRange;
             }
         }
 

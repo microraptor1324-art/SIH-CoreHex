@@ -1,53 +1,8 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace ARMiningSimulator.Investigation
 {
-    public enum RootCauseType
-    {
-        ElectricalCableInsulationFailure = 0,
-        ConveyorBearingFrictionDustIgnition = 1,
-        HydraulicHoseRuptureHotSurface = 2,
-        TransformerOilSurgeFlashover = 3,
-        VentilationFanMotorSeizure = 4,
-        BatteryThermalRunawayOvercharge = 5,
-        MotorWindingOverloadFailure = 6
-    }
-
-    [System.Serializable]
-    public class RootCauseOption
-    {
-        public RootCauseType causeType;
-        public string title;
-        public string description;
-        public bool isCorrect;
-        public string explanation;
-    }
-
-    [System.Serializable]
-    public class CandidateMachineData
-    {
-        public string displayName;
-        public GameObject targetGameObject;
-        public bool isOrigin;
-        public string inspectionClueText;
-        public string thermalTelemetryText;
-        public bool hasBeenInspected;
-    }
-
-    [System.Serializable]
-    public class IncidentReport
-    {
-        public string equipmentName;
-        public string visualClue;
-        public string thermalReading;
-        public RootCauseType actualCause;
-        public List<RootCauseOption> options = new List<RootCauseOption>();
-        public List<CandidateMachineData> candidateMachines = new List<CandidateMachineData>();
-        public CandidateMachineData selectedMachine;
-    }
-
     public enum TraineeGrade
     {
         A_Exemplary = 0,

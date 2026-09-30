@@ -19,7 +19,7 @@ namespace ARMiningSimulator.Extinguisher
         public Color bandColor;
         public float effectiveRange = 3.5f;
         public float maxDischargeDuration = 12f;
-        public float suppressionRate = 40f; // Eliminates 100 HP fire in ~2.5s of direct base contact
+        public float suppressionRate = 40f; // Informational only — suppression speed is ExtinguisherController._secondsToExtinguish (7s)
         public bool isEffectiveOnElectrical = true;
         public bool isHazardousOnElectrical = false;
         public string description;
@@ -36,7 +36,7 @@ namespace ARMiningSimulator.Extinguisher
                         colorBandName = "Black Band",
                         bandColor = new Color(0.12f, 0.12f, 0.14f),
                         effectiveRange = 3.2f,
-                        maxDischargeDuration = 10f,
+                        maxDischargeDuration = 14f,
                         suppressionRate = 45f,
                         isEffectiveOnElectrical = true,
                         isHazardousOnElectrical = false,
